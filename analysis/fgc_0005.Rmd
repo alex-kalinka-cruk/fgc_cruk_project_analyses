@@ -73,12 +73,12 @@ build_perept_input <- function(data, ){
   
 }
 
-fix_FPR.desir <- function(data, fpr = 0.05, type = "negative", step_size = 0.1){
+fix_FDR.desir <- function(data, start_desir = 0.9, fdr_thresh = 0.05, type = "negative", step_size = 0.1){
   if(type == "negative"){
     data %<>%
       select(cell_line, gene, TvCCvP_NegativeDesi)
   }
-  desir_thresh <- 0.9
+  desir_thresh <- start_desir
   finish <- FALSE
   track_perf <- NULL
   while(!finish){
@@ -91,11 +91,20 @@ fix_FPR.desir <- function(data, fpr = 0.05, type = "negative", step_size = 0.1){
       dplyr::ungroup() %>%
       filter(!is.na(total) & gene != "Control")
     mle <- MLE.perept(as.data.frame(td))
-    track_perf <- rbind(track_perf, data.frame(Desirability_threshold = desir_thresh,
-                                               False_Positive_Rate = mle$performance$p10,
+    # Estimate of FDR.
+    num_FP <- mle$performance$p10*nrow(td)
+    num_TP <- mle$performance$p11*nrow(td)
+    FDR <- num_FP/(num_FP+num_TP)
+    track_perf <- rbind(track_perf, data.frame(Desir_threshold = desir_thresh,
+                                               FPR = mle$performance$p10,
+                                               FDR = FDR,
                                                Sensitivity = mle$performance$p11,
-                                               Prevalence = mle$prevalence$theta_1))
-    if(mle$performance$p10 >= fpr || desir_thresh <= 0.5){
+                                               Prevalence = mle$prevalence$theta_1,
+                                               Prob_pos.two_shared_hits = mle$delta$delta_pos[which(td$total==2)[1]],
+                                               Number_singletons = length(which(td$total==1)),
+                                               Number_common_hits = length(which(td$total>=2))) %>%
+                          mutate(Precision = 1-FDR))
+    if(FDR >= fdr_thresh){
       finish <- TRUE
       ret <- td %>%
         mutate(probability_hit = mle$delta$delta_pos)
@@ -106,7 +115,9 @@ fix_FPR.desir <- function(data, fpr = 0.05, type = "negative", step_size = 0.1){
   return(list(data = ret, perf = track_perf))
 }
 
-fpr.desir <- fix_FPR.desir(data.desir)
+fdr.desir <- fix_FPR.desir(data.desir)
+fdr.desir.sp <- fix_FPR.desir(data.desir, start_desir = 0.7, step_size = 0.02)
+
 
 ```
 
