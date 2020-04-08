@@ -69,8 +69,15 @@ data.desir <- read_gene_summ(desir_files, type = "desir")
 
 ```{r}
 # Put data into format needed by 'MLE.perept'.
-build_perept_input <- function(data, ){
-  
+prep_4_mle <- function(data, desir_thresh){
+  data %<>%
+      mutate(hit = TvCCvP_NegativeDesi >= desir_thresh) %>%
+      tidyr::pivot_wider(id_cols = c(cell_line, gene), names_from = cell_line, values_from = hit) %>%
+      dplyr::rowwise() %>%
+      mutate(total = sum(c(HCT116, `HT-29`, RKO, SW480))) %>%
+      dplyr::ungroup() %>%
+      filter(!is.na(total) & gene != "Control")
+  return(data)
 }
 
 fix_FDR.desir <- function(data, start_desir = 0.9, fdr_thresh = 0.05, type = "negative", step_size = 0.1){
@@ -83,13 +90,7 @@ fix_FDR.desir <- function(data, start_desir = 0.9, fdr_thresh = 0.05, type = "ne
   track_perf <- NULL
   while(!finish){
     cat("Desirability Threshold:",desir_thresh,"\n")
-    td <- data %>%
-      mutate(hit = TvCCvP_NegativeDesi >= desir_thresh) %>%
-      tidyr::pivot_wider(id_cols = c(cell_line, gene), names_from = cell_line, values_from = hit) %>%
-      dplyr::rowwise() %>%
-      mutate(total = sum(c(HCT116, `HT-29`, RKO, SW480))) %>%
-      dplyr::ungroup() %>%
-      filter(!is.na(total) & gene != "Control")
+    td <- prep_4_mle(data, desir_thresh)
     mle <- MLE.perept(as.data.frame(td))
     # Estimate of FDR.
     num_FP <- mle$performance$p10*nrow(td)
@@ -118,6 +119,8 @@ fix_FDR.desir <- function(data, start_desir = 0.9, fdr_thresh = 0.05, type = "ne
 fdr.desir <- fix_FPR.desir(data.desir)
 fdr.desir.sp <- fix_FPR.desir(data.desir, start_desir = 0.7, step_size = 0.02)
 
+gene_desi_0.607 <- prep_4_mle(data.desir,0.607) %>%
+  mutate(probability_hit = vv$delta$delta_pos)
 
 ```
 
