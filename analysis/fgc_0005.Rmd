@@ -1,0 +1,116 @@
+---
+title: 'FGC_0005 Analysis'
+author: "Alex Kalinka"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    depth: 3
+    highlight: tango
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+---
+
+# Setup
+
+```{r,echo=F}
+options(warn=-1)
+
+suppressMessages(library(knitr))
+suppressMessages(library(tidyr))
+suppressMessages(library(magrittr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(dplyr))
+suppressMessages(library(perept))
+
+filter <- dplyr::filter
+select <- dplyr::select
+rename <- dplyr::rename
+mutate <- dplyr::mutate
+
+# Data kept locally.
+mageck_files <- list.files("~/data/az_cruk/cdc7", 
+                           pattern = "Treatment_vs_Control.gene_summary.txt", recursive = T, full.names = T)
+
+desir_files <- list.files("~/data/az_cruk/cdc7", 
+                          pattern = "DesirabilityGeneRanking.tsv", recursive = T, full.names = T)
+
+read_gene_summ <- function(files, type = "mageck"){
+  ret <- NULL
+  for(file in files){
+    cell_line <- gsub("^.*?Comp-(\\S+?)\\/.*$","\\1",file)
+    if(type == "mageck"){
+      td <- read.table(file, header=T, stringsAsFactors = F) %>%
+        select(id, neg.score, neg.p.value, neg.fdr, neg.rank, neg.lfc, pos.score, pos.p.value, pos.fdr, pos.rank, pos.lfc) %>%
+        rename(gene = id)
+    }else{
+      td <- read.delim(file, header=T, stringsAsFactors = F) %>%
+        select(gene, TvCCvP_PositiveDesi, TvCCvP_NegativeDesi)
+    }
+    ret <- rbind(ret, data.frame(cell_line = cell_line,td), stringsAsFactors=F)
+  }
+  return(ret)
+}
+
+data.mageck <- read_gene_summ(mageck_files)
+data.desir <- read_gene_summ(desir_files, type = "desir")
+
+```
+
+# Approach
+
+
+
+# Performance MLE: Choosing score cutoffs on basis of FPR estimates
+
+## Desirability scores
+
+```{r}
+# Put data into format needed by 'MLE.perept'.
+build_perept_input <- function(data, ){
+  
+}
+
+fix_FPR.desir <- function(data, fpr = 0.05, type = "negative", step_size = 0.1){
+  if(type == "negative"){
+    data %<>%
+      select(cell_line, gene, TvCCvP_NegativeDesi)
+  }
+  desir_thresh <- 0.9
+  finish <- FALSE
+  track_perf <- NULL
+  while(!finish){
+    cat("Desirability Threshold:",desir_thresh,"\n")
+    td <- data %>%
+      mutate(hit = TvCCvP_NegativeDesi >= desir_thresh) %>%
+      tidyr::pivot_wider(id_cols = c(cell_line, gene), names_from = cell_line, values_from = hit) %>%
+      dplyr::rowwise() %>%
+      mutate(total = sum(c(HCT116, `HT-29`, RKO, SW480))) %>%
+      dplyr::ungroup() %>%
+      filter(!is.na(total) & gene != "Control")
+    mle <- MLE.perept(as.data.frame(td))
+    track_perf <- rbind(track_perf, data.frame(Desirability_threshold = desir_thresh,
+                                               False_Positive_Rate = mle$performance$p10,
+                                               Sensitivity = mle$performance$p11,
+                                               Prevalence = mle$prevalence$theta_1))
+    if(mle$performance$p10 >= fpr || desir_thresh <= 0.5){
+      finish <- TRUE
+      ret <- td %>%
+        mutate(probability_hit = mle$delta$delta_pos)
+    }else{
+      desir_thresh <- desir_thresh - step_size
+    }
+  }
+  return(list(data = ret, perf = track_perf))
+}
+
+fpr.desir <- fix_FPR.desir(data.desir)
+
+```
+
+
+## Mageck scores
+
+
