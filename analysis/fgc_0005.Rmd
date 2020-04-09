@@ -31,8 +31,8 @@ rename <- dplyr::rename
 mutate <- dplyr::mutate
 
 # Slow to run from scratch.
-desir_perf.depl <- readRDS(file="../data/desir_fdr_perf.rds")
-mle_desir_0.607.depl <- readRDS(file="../data/mle_output_target_desir_0.607.rds")
+desir_perf.depl <- readRDS(file="../data/desir_fdr_perf_depleted.rds")
+mle_desir_0.8.depl <- readRDS(file="../data/mle_depleted_desir_thresh_0.8.rds")
 
 # Data kept locally.
 mageck_files <- list.files("~/data/az_cruk/cdc7", 
@@ -108,19 +108,26 @@ fix_FDR.desir <- function(data, start_desir = 0.9, fdr_thresh = 0.1, type = "neg
     num_TN <- nrow(td)-num_TP
     num_FP <- mle$performance$p10*num_TN
     FDR <- num_FP/(num_FP+num_TP)
-    # Estimate of FDR after exluding singletons.
-    prob_two_false <- 1-mle$delta$delta_pos[which(td$total==2)[1]]
-    prob_three_false <- 1-mle$delta$delta_pos[which(td$total==3)[1]]
-    num_two_false <- round(length(which(td$total==2))*prob_two_false)
-    num_three_false <- round(length(which(td$total==3))*prob_three_false)
-    FDR.comm <- (num_two_false + num_three_false)/num_TP
+    # Estimate of FDR after excluding singletons.
+    if(length(which(td$total>=2))==0){
+      # No shared hits.
+      FDR.comm <- 0
+      prob_pos_2 <- 0
+    }else{
+      prob_two_false <- 1-mle$delta$delta_pos[which(td$total==2)[1]]
+      prob_three_false <- 1-mle$delta$delta_pos[which(td$total==3)[1]]
+      num_two_false <- round(length(which(td$total==2))*prob_two_false)
+      num_three_false <- round(length(which(td$total==3))*prob_three_false)
+      FDR.comm <- (num_two_false + num_three_false)/(length(which(td$total>=2)))
+      prob_pos_2 <- mle$delta$delta_pos[which(td$total==2)[1]]
+    }
     track_perf <- rbind(track_perf, data.frame(Desir_threshold = desir_thresh,
                                                FPR = mle$performance$p10,
                                                FDR.global = FDR,
                                                FDR.common = FDR.comm,
                                                Sensitivity = mle$performance$p11,
                                                Prevalence = round(mle$prevalence$theta_1*nrow(td)),
-                                               Prob_pos.two_shared_hits = mle$delta$delta_pos[which(td$total==2)[1]],
+                                               Prob_pos.two_shared_hits = prob_pos_2,
                                                Number_singletons = length(which(td$total==1)),
                                                Number_common_hits = length(which(td$total>=2))))
     if(FDR.comm >= fdr_thresh){
@@ -140,7 +147,7 @@ fix_FDR.desir <- function(data, start_desir = 0.9, fdr_thresh = 0.1, type = "neg
 
 ```{r, eval=F}
 fdr.desir <- fix_FDR.desir(data.desir)
-fdr.desir.sp <- fix_FDR.desir(data.desir, start_desir = 0.7, step_size = 0.02)
+fdr.desir.sp <- fix_FDR.desir(data.desir, start_desir = 0.8, step_size = 0.01)
 
 gene_desi_0.607 <- prep_4_mle(data.desir,0.607) %>%
   mutate(probability_hit = vv$delta$delta_pos)
