@@ -30,6 +30,10 @@ select <- dplyr::select
 rename <- dplyr::rename
 mutate <- dplyr::mutate
 
+# Slow to run from scratch.
+desir_perf.depl <- readRDS(file="../data/desir_fdr_perf.rds")
+mle_desir_0.607.depl <- readRDS(file="../data/mle_output_target_desir_0.607.rds")
+
 # Data kept locally.
 mageck_files <- list.files("~/data/az_cruk/cdc7", 
                            pattern = "Treatment_vs_Control.gene_summary.txt", recursive = T, full.names = T)
@@ -47,7 +51,7 @@ read_gene_summ <- function(files, type = "mageck"){
         rename(gene = id)
     }else{
       td <- read.delim(file, header=T, stringsAsFactors = F) %>%
-        select(gene, TvCCvP_PositiveDesi, TvCCvP_NegativeDesi)
+        select(gene, TvCCvP_PositiveDesi, TvCCvP_NegativeDesi, TvC_negpval, TvC_pospval, TvC_LFC)
     }
     ret <- rbind(ret, data.frame(cell_line = cell_line,td), stringsAsFactors=F)
   }
@@ -69,9 +73,10 @@ data.desir <- read_gene_summ(desir_files, type = "desir")
 
 ```{r}
 # Put data into format needed by 'MLE.perept'.
-prep_4_mle <- function(data, desir_thresh){
+prep_4_mle <- function(data, desir_thresh, dcol_name = "TvCCvP_NegativeDesi"){
+  dcol <- sym(dcol_name)
   data %<>%
-      mutate(hit = TvCCvP_NegativeDesi >= desir_thresh) %>%
+      mutate(hit = !!dcol >= desir_thresh) %>%
       tidyr::pivot_wider(id_cols = c(cell_line, gene), names_from = cell_line, values_from = hit) %>%
       dplyr::rowwise() %>%
       mutate(total = sum(c(HCT116, `HT-29`, RKO, SW480))) %>%
@@ -80,32 +85,45 @@ prep_4_mle <- function(data, desir_thresh){
   return(data)
 }
 
-fix_FDR.desir <- function(data, start_desir = 0.9, fdr_thresh = 0.05, type = "negative", step_size = 0.1){
+# Find desirability threshold that corresponds to FDR of X%.
+fix_FDR.desir <- function(data, start_desir = 0.9, fdr_thresh = 0.1, type = "negative", step_size = 0.1){
   if(type == "negative"){
     data %<>%
       select(cell_line, gene, TvCCvP_NegativeDesi)
+    dcol <- "TvCCvP_NegativeDesi"
+  }else{
+    data %<>%
+      select(cell_line, gene, TvCCvP_PositiveDesi)
+    dcol <- "TvCCvP_PositiveDesi"
   }
   desir_thresh <- start_desir
   finish <- FALSE
   track_perf <- NULL
   while(!finish){
     cat("Desirability Threshold:",desir_thresh,"\n")
-    td <- prep_4_mle(data, desir_thresh)
+    td <- prep_4_mle(data, desir_thresh, dcol_name = dcol)
     mle <- MLE.perept(as.data.frame(td))
-    # Estimate of FDR.
-    num_FP <- mle$performance$p10*nrow(td)
-    num_TP <- mle$performance$p11*nrow(td)
+    # Estimate of global FDR.
+    num_TP <- mle$prevalence$theta_1*nrow(td)
+    num_TN <- nrow(td)-num_TP
+    num_FP <- mle$performance$p10*num_TN
     FDR <- num_FP/(num_FP+num_TP)
+    # Estimate of FDR after exluding singletons.
+    prob_two_false <- 1-mle$delta$delta_pos[which(td$total==2)[1]]
+    prob_three_false <- 1-mle$delta$delta_pos[which(td$total==3)[1]]
+    num_two_false <- round(length(which(td$total==2))*prob_two_false)
+    num_three_false <- round(length(which(td$total==3))*prob_three_false)
+    FDR.comm <- (num_two_false + num_three_false)/num_TP
     track_perf <- rbind(track_perf, data.frame(Desir_threshold = desir_thresh,
                                                FPR = mle$performance$p10,
-                                               FDR = FDR,
+                                               FDR.global = FDR,
+                                               FDR.common = FDR.comm,
                                                Sensitivity = mle$performance$p11,
-                                               Prevalence = mle$prevalence$theta_1,
+                                               Prevalence = round(mle$prevalence$theta_1*nrow(td)),
                                                Prob_pos.two_shared_hits = mle$delta$delta_pos[which(td$total==2)[1]],
                                                Number_singletons = length(which(td$total==1)),
-                                               Number_common_hits = length(which(td$total>=2))) %>%
-                          mutate(Precision = 1-FDR))
-    if(FDR >= fdr_thresh){
+                                               Number_common_hits = length(which(td$total>=2))))
+    if(FDR.comm >= fdr_thresh){
       finish <- TRUE
       ret <- td %>%
         mutate(probability_hit = mle$delta$delta_pos)
@@ -116,15 +134,38 @@ fix_FDR.desir <- function(data, start_desir = 0.9, fdr_thresh = 0.05, type = "ne
   return(list(data = ret, perf = track_perf))
 }
 
-fdr.desir <- fix_FPR.desir(data.desir)
-fdr.desir.sp <- fix_FPR.desir(data.desir, start_desir = 0.7, step_size = 0.02)
+```
+
+### Depleted
+
+```{r, eval=F}
+fdr.desir <- fix_FDR.desir(data.desir)
+fdr.desir.sp <- fix_FDR.desir(data.desir, start_desir = 0.7, step_size = 0.02)
 
 gene_desi_0.607 <- prep_4_mle(data.desir,0.607) %>%
   mutate(probability_hit = vv$delta$delta_pos)
 
 ```
 
+```{r}
+ggplot(desir_perf.depl, aes(Desir_threshold, FDR)) +
+  geom_point() +
+  geom_smooth()
 
-## Mageck scores
+
+```
+
+
+### Enriched
+
+```{r, eval=F}
+fdr.desir.enr <- fix_FDR.desir(data.desir, type="positive")
+fdr.desir.sp <- fix_FDR.desir(data.desir, type="positive", start_desir = 0.7, step_size = 0.02)
+
+gene_desi_0.607 <- prep_4_mle(data.desir,0.607) %>%
+  mutate(probability_hit = vv$delta$delta_pos)
+
+```
+
 
 
