@@ -104,15 +104,15 @@ pl <- desir_perf.depl %>%
   geom_smooth() +
   geom_segment(aes(x = 0.8, y = -0.03, xend = 0.8, yend = 0.1), linetype = "dashed") +
   geom_segment(aes(x = 0.67, y = 0.1, xend = 0.8, yend = 0.1), linetype = "dashed") +
-  ylab("Desirability Threshold") +
-  xlab("FDR of shared hits") +
-  ggtitle("Desirability 10% FDR Threshold: Depletion")
+  xlab("Desirability Threshold") +
+  ylab("FDR of shared hits") +
+  ggtitle("Desirability 10% False Discovery Rate (FDR) Threshold: Depletion")
 
 suppressMessages(print(pl))
 
 ```
 
-## Gene Candidates
+## Candidate Genes
 
 ```{r}
 cand_df %>%
