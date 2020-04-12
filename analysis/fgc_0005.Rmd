@@ -149,8 +149,12 @@ fix_FDR.desir <- function(data, start_desir = 0.9, fdr_thresh = 0.1, type = "neg
 fdr.desir <- fix_FDR.desir(data.desir)
 fdr.desir.sp <- fix_FDR.desir(data.desir, start_desir = 0.8, step_size = 0.01)
 
-gene_desi_0.607 <- prep_4_mle(data.desir,0.607) %>%
-  mutate(probability_hit = vv$delta$delta_pos)
+```
+
+```{r}
+depl_candidates <-  prep_4_mle(data.desir,0.8) %>%
+  mutate(probability_hit = mle_desir_0.8.depl$delta$delta_pos,
+         gene_hit = probability_hit > 0.5)
 
 ```
 

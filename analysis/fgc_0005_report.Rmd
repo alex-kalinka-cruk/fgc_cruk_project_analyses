@@ -1,0 +1,126 @@
+---
+title: 'CDC7 drug-interaction CRISPR Knock-Out screen Analysis'
+author: "Alex Kalinka"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    depth: 3
+    highlight: tango
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+---
+
+# Setup
+
+```{r,echo=F}
+options(warn=-1)
+
+suppressMessages(library(knitr))
+suppressMessages(library(tidyr))
+suppressMessages(library(magrittr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(dplyr))
+suppressMessages(library(gt))
+suppressMessages(library(ggsci))
+
+proj_data.path <- file.path("..","..","project_data","fgc_0005","images")
+
+filter <- dplyr::filter
+select <- dplyr::select
+rename <- dplyr::rename
+mutate <- dplyr::mutate
+
+# Slow to run from scratch.
+desir_perf.depl <- readRDS(file="../data/desir_fdr_perf_depleted.rds")
+mle_desir_0.8.depl <- readRDS(file="../data/mle_depleted_desir_thresh_0.8.rds")
+
+desir_files <- list.files("~/data/az_cruk/cdc7", 
+                          pattern = "DesirabilityGeneRanking.tsv", recursive = T, full.names = T)
+
+read_gene_summ <- function(files){
+  ret <- NULL
+  for(file in files){
+    cell_line <- gsub("^.*?Comp-(\\S+?)\\/.*$","\\1",file)
+    td <- read.delim(file, header=T, stringsAsFactors = F) %>%
+      select(gene, TvCCvP_PositiveDesi, TvCCvP_NegativeDesi, TvC_negpval, TvC_pospval, TvC_LFC)
+    ret <- rbind(ret, data.frame(cell_line = cell_line, td), stringsAsFactors=F)
+  }
+  return(ret)
+}
+
+data.desir <- read_gene_summ(desir_files)
+
+```
+
+```{r}
+# Prep data for printing candidate table.
+prep_4_cand_tbl <- function(data, desir_thresh, dcol_name = "TvCCvP_NegativeDesi"){
+  dcol <- sym(dcol_name)
+  data %<>%
+      mutate(hit = !!dcol >= desir_thresh) %>%
+      tidyr::pivot_wider(id_cols = c(cell_line, gene), names_from = cell_line, values_from = c(TvCCvP_NegativeDesi,TvC_LFC)) %>%
+      dplyr::rowwise() %>%
+      mutate(Desirability = median(c(TvCCvP_NegativeDesi_HCT116,`TvCCvP_NegativeDesi_HT-29`,TvCCvP_NegativeDesi_RKO,
+                                     TvCCvP_NegativeDesi_SW480))) %>%
+      dplyr::ungroup() %>%
+      filter(!is.na(Desirability) & gene != "Control") %>%
+      rename(HCT116 = TvC_LFC_HCT116, `HT-29` = `TvC_LFC_HT-29`, RKO = TvC_LFC_RKO, SW480 = TvC_LFC_SW480,
+             Gene = gene) %>%
+      select(Gene, Desirability, HCT116, RKO, SW480, `HT-29`)
+  return(data)
+}
+
+cand_df <- prep_4_cand_tbl(data.desir, 0.8) %>%
+  mutate(probability_hit = mle_desir_0.8.depl$delta$delta_pos) %>%
+  filter(probability_hit > 0.5) %>%
+  select(-probability_hit) %>%
+  arrange(desc(Desirability))
+
+```
+
+# Summary
+
+
+
+# Sensitivity gene candidates
+
+## Depleted
+
+```{r}
+ggplot(desir_perf.depl, aes(Desir_threshold, FDR.common)) +
+  geom_point() +
+  geom_smooth()
+
+```
+
+```{r}
+cand_df %>%
+  gt() %>%
+  tab_header(title = md("CDC7 drug-sensitivity candidate genes"),
+             subtitle = md("Depletion hits at 10% FDR")) %>%
+  tab_spanner(label = "MAGeCK logFC", columns = c("HCT116", "RKO", "SW480", "HT-29")) %>%
+  fmt_number(columns = vars(Desirability, HCT116, RKO, SW480, `HT-29`),
+             decimals = 3) %>%
+  cols_align(align = "right", columns = TRUE) %>%
+  data_color(
+    columns = vars(Desirability),
+    colors = scales::col_numeric(
+      palette = paletteer::paletteer_d(
+        palette = "ggsci::red_material"
+      ) %>% as.character(),
+      domain = NULL
+    ),
+    alpha = 0.8
+  )
+
+```
+
+## Enriched
+
+None.
+
+
+

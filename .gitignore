@@ -1,3 +1,6 @@
+# Reports.
+analysis/*_report.html
+
 # History files
 .Rhistory
 .Rapp.history
