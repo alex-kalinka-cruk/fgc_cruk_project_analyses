@@ -67,9 +67,12 @@ prep_4_cand_tbl <- function(data, desir_thresh, dcol_name = "TvCCvP_NegativeDesi
                                      TvCCvP_NegativeDesi_SW480))) %>%
       dplyr::ungroup() %>%
       filter(!is.na(Desirability) & gene != "Control") %>%
-      rename(HCT116 = TvC_LFC_HCT116, `HT-29` = `TvC_LFC_HT-29`, RKO = TvC_LFC_RKO, SW480 = TvC_LFC_SW480,
+      rename(D_HCT116 = TvCCvP_NegativeDesi_HCT116, `D_HT-29` = `TvCCvP_NegativeDesi_HT-29`,
+             D_RKO = TvCCvP_NegativeDesi_RKO, `D_SW480` = `TvCCvP_NegativeDesi_SW480`,
+             LFC_HCT116 = TvC_LFC_HCT116, `LFC_HT-29` = `TvC_LFC_HT-29`, LFC_RKO = TvC_LFC_RKO, LFC_SW480 = TvC_LFC_SW480,
              Gene = gene) %>%
-      select(Gene, Desirability, HCT116, RKO, SW480, `HT-29`)
+      select(Gene, Desirability, D_HCT116, D_SW480, D_RKO, `D_HT-29`, 
+             LFC_HCT116, LFC_SW480, LFC_RKO, `LFC_HT-29`)
   return(data)
 }
 
@@ -100,9 +103,11 @@ ggplot(desir_perf.depl, aes(Desir_threshold, FDR.common)) +
 cand_df %>%
   gt() %>%
   tab_header(title = md("CDC7 drug-sensitivity candidate genes"),
-             subtitle = md("Depletion hits at 10% FDR")) %>%
-  tab_spanner(label = "MAGeCK logFC", columns = c("HCT116", "RKO", "SW480", "HT-29")) %>%
-  fmt_number(columns = vars(Desirability, HCT116, RKO, SW480, `HT-29`),
+             subtitle = md("Depletion hits at 10% FDR (ranked by median Desirability)")) %>%
+  tab_spanner(label = "MAGeCK logFC", columns = c("LFC_HCT116", "LFC_RKO", "LFC_SW480", "LFC_HT-29")) %>%
+  tab_spanner(label = "Desirability", columns = c("D_HCT116", "D_RKO", "D_SW480", "D_HT-29")) %>%
+  fmt_number(columns = vars(Desirability, D_HCT116, D_HCT116, D_SW480, D_RKO, `D_HT-29`,
+                            LFC_HCT116, LFC_SW480, LFC_RKO, `LFC_HT-29`),
              decimals = 3) %>%
   cols_align(align = "right", columns = TRUE) %>%
   data_color(
@@ -114,6 +119,19 @@ cand_df %>%
       domain = NULL
     ),
     alpha = 0.8
+  ) %>%
+  data_color(columns = vars(D_HCT116,D_SW480,D_RKO,`D_HT-29`),
+             colors = function(x) ifelse(x >= 0.8, "palegreen","#808080"),
+      alpha = 0.8) %>%
+  grand_summary_rows(
+    columns = vars(LFC_HCT116,LFC_SW480,LFC_RKO,`LFC_HT-29`),
+    fns = list(Median = "median"),
+    formatter = fmt_number,
+    decimals = 3) %>%
+  cols_label(D_HCT116 = "HCT116", D_SW480 = "SW480", D_RKO = "RKO", `D_HT-29` = "HT-29",
+             LFC_HCT116 = "HCT116", LFC_SW480 = "SW480", LFC_RKO = "RKO", `LFC_HT-29` = "HT-29") %>%
+  tab_options(
+    grand_summary_row.background.color = "#ACEACE80"
   )
 
 ```
