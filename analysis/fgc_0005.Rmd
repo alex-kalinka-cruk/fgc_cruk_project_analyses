@@ -86,7 +86,7 @@ prep_4_mle <- function(data, desir_thresh, dcol_name = "TvCCvP_NegativeDesi"){
 }
 
 # Find desirability threshold that corresponds to FDR of X%.
-fix_FDR.desir <- function(data, start_desir = 0.9, fdr_thresh = 0.1, type = "negative", step_size = 0.1){
+fix_FDR.desir <- function(data, start_desir = 0.9, stop_desir = NULL, fdr_thresh = 0.1, type = "negative", step_size = 0.1){
   if(type == "negative"){
     data %<>%
       select(cell_line, gene, TvCCvP_NegativeDesi)
@@ -130,6 +130,13 @@ fix_FDR.desir <- function(data, start_desir = 0.9, fdr_thresh = 0.1, type = "neg
                                                Prob_pos.two_shared_hits = prob_pos_2,
                                                Number_singletons = length(which(td$total==1)),
                                                Number_common_hits = length(which(td$total>=2))))
+    if(!is.null(stop_desir)){
+      if(desir_thresh <= stop_desir){
+        finish <- TRUE
+        ret <- td %>%
+        mutate(probability_hit = mle$delta$delta_pos)
+      }
+    }
     if(FDR.comm >= fdr_thresh){
       finish <- TRUE
       ret <- td %>%
@@ -173,8 +180,6 @@ ggplot(desir_perf.depl, aes(Desir_threshold, FDR)) +
 fdr.desir.enr <- fix_FDR.desir(data.desir, type="positive")
 fdr.desir.sp <- fix_FDR.desir(data.desir, type="positive", start_desir = 0.7, step_size = 0.02)
 
-gene_desi_0.607 <- prep_4_mle(data.desir,0.607) %>%
-  mutate(probability_hit = vv$delta$delta_pos)
 
 ```
 

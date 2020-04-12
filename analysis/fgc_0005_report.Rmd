@@ -1,5 +1,5 @@
 ---
-title: 'CDC7 drug-interaction CRISPR Knock-Out screen Analysis'
+title: 'CDC7 drug-sensitivity CRISPR Knock-Out screen Analysis'
 author: "Alex Kalinka"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -13,10 +13,11 @@ output:
     toc_float: true
 ---
 
-# Setup
 
 ```{r,echo=F}
 options(warn=-1)
+
+desir_thresh <- 0.8
 
 suppressMessages(library(knitr))
 suppressMessages(library(tidyr))
@@ -76,7 +77,7 @@ prep_4_cand_tbl <- function(data, desir_thresh, dcol_name = "TvCCvP_NegativeDesi
   return(data)
 }
 
-cand_df <- prep_4_cand_tbl(data.desir, 0.8) %>%
+cand_df <- prep_4_cand_tbl(data.desir, desir_thresh) %>%
   mutate(probability_hit = mle_desir_0.8.depl$delta$delta_pos) %>%
   filter(probability_hit > 0.5) %>%
   select(-probability_hit) %>%
@@ -87,23 +88,37 @@ cand_df <- prep_4_cand_tbl(data.desir, 0.8) %>%
 # Summary
 
 
+# Approach
 
-# Sensitivity gene candidates
 
-## Depleted
+
+# Sensitivity Analysis
+
+## Desirability Threshold
 
 ```{r}
-ggplot(desir_perf.depl, aes(Desir_threshold, FDR.common)) +
+pl <- desir_perf.depl %>%
+  filter(!Desir_threshold %in% c(0.88,0.799,0.794,0.79,0.789)) %>%
+  ggplot(aes(Desir_threshold, FDR.common)) +
   geom_point() +
-  geom_smooth()
+  geom_smooth() +
+  geom_segment(aes(x = 0.8, y = -0.03, xend = 0.8, yend = 0.1), linetype = "dashed") +
+  geom_segment(aes(x = 0.67, y = 0.1, xend = 0.8, yend = 0.1), linetype = "dashed") +
+  ylab("Desirability Threshold") +
+  xlab("FDR of shared hits") +
+  ggtitle("Desirability 10% FDR Threshold: Depletion")
+
+suppressMessages(print(pl))
 
 ```
+
+## Gene Candidates
 
 ```{r}
 cand_df %>%
   gt() %>%
-  tab_header(title = md("CDC7 drug-sensitivity candidate genes"),
-             subtitle = md("Depletion hits at 10% FDR (ranked by median Desirability)")) %>%
+  tab_header(title = md("**CDC7** drug-sensitivity candidate genes"),
+             subtitle = md("**Depletion** hits at 10% FDR (ranked by median Desirability)")) %>%
   tab_spanner(label = "MAGeCK logFC", columns = c("LFC_HCT116", "LFC_RKO", "LFC_SW480", "LFC_HT-29")) %>%
   tab_spanner(label = "Desirability", columns = c("D_HCT116", "D_RKO", "D_SW480", "D_HT-29")) %>%
   fmt_number(columns = vars(Desirability, D_HCT116, D_HCT116, D_SW480, D_RKO, `D_HT-29`,
@@ -121,7 +136,7 @@ cand_df %>%
     alpha = 0.8
   ) %>%
   data_color(columns = vars(D_HCT116,D_SW480,D_RKO,`D_HT-29`),
-             colors = function(x) ifelse(x >= 0.8, "palegreen","#808080"),
+             colors = function(x) ifelse(x >= desir_thresh, "palegreen","#808080"),
       alpha = 0.8) %>%
   grand_summary_rows(
     columns = vars(LFC_HCT116,LFC_SW480,LFC_RKO,`LFC_HT-29`),
@@ -131,14 +146,46 @@ cand_df %>%
   cols_label(D_HCT116 = "HCT116", D_SW480 = "SW480", D_RKO = "RKO", `D_HT-29` = "HT-29",
              LFC_HCT116 = "HCT116", LFC_SW480 = "SW480", LFC_RKO = "RKO", `LFC_HT-29` = "HT-29") %>%
   tab_options(
+    table.font.size = "80\\%",
     grand_summary_row.background.color = "#ACEACE80"
   )
 
 ```
 
-## Enriched
+## GO enrichments
 
-None.
+![String-GO](../../project_data/fgc_0005/images/String_GO.png)
+
+## Interactions
+
+![String-Interactions](../../project_data/fgc_0005/images/String_Interactions.png)
+
+
+## Reactome enrichments
+
+![String-Reactome](../../project_data/fgc_0005/images/String_Reactome.png)
+
+# Enriched Genes
+
+No shared hits with Desirability > 0.9.
+
+
+# QC
+
+## HCT116
+
+
+## SW480
+
+
+## RKO
+
+
+## HT-29
+
+
+# References
+
 
 
 
