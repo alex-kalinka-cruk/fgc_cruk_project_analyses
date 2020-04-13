@@ -27,7 +27,7 @@ suppressMessages(library(dplyr))
 suppressMessages(library(gt))
 suppressMessages(library(ggsci))
 
-proj_data.path <- file.path("..","..","project_data","fgc_0005","images")
+proj_data.path <- file.path("..","..","project_data","fgc_0005")
 
 filter <- dplyr::filter
 select <- dplyr::select
@@ -37,6 +37,7 @@ mutate <- dplyr::mutate
 # Slow to run from scratch.
 desir_perf.depl <- readRDS(file="../data/desir_fdr_perf_depleted.rds")
 mle_desir_0.8.depl <- readRDS(file="../data/mle_depleted_desir_thresh_0.8.rds")
+data.mageck <- readRDS(file=file.path(proj_data.path,"data.mageck.rds"))
 
 desir_files <- list.files("~/data/az_cruk/cdc7", 
                           pattern = "DesirabilityGeneRanking.tsv", recursive = T, full.names = T)
@@ -59,40 +60,103 @@ data.desir <- read_gene_summ(desir_files)
 ```{r}
 # Prep data for printing candidate table.
 prep_4_cand_tbl <- function(data, desir_thresh, dcol_name = "TvCCvP_NegativeDesi"){
+  type <- ifelse(grepl("Negative",dcol_name),"neg","pos")
   dcol <- sym(dcol_name)
   data %<>%
       mutate(hit = !!dcol >= desir_thresh) %>%
-      tidyr::pivot_wider(id_cols = c(cell_line, gene), names_from = cell_line, values_from = c(TvCCvP_NegativeDesi,TvC_LFC)) %>%
+      tidyr::pivot_wider(id_cols = c(cell_line, gene), names_from = cell_line, values_from = c(!!dcol, TvC_LFC)) %>%
       dplyr::rowwise() %>%
-      mutate(Desirability = median(c(TvCCvP_NegativeDesi_HCT116,`TvCCvP_NegativeDesi_HT-29`,TvCCvP_NegativeDesi_RKO,
-                                     TvCCvP_NegativeDesi_SW480))) %>%
+      mutate(Desirability = ifelse(type == "neg",
+                                   median(c(TvCCvP_NegativeDesi_HCT116,`TvCCvP_NegativeDesi_HT-29`,TvCCvP_NegativeDesi_RKO,
+                                     TvCCvP_NegativeDesi_SW480)),
+                                   median(c(TvCCvP_PositiveDesi_HCT116,`TvCCvP_PositiveDesi_HT-29`,TvCCvP_PositiveDesi_RKO,
+                                     TvCCvP_PositiveDesi_SW480)))) %>%
       dplyr::ungroup() %>%
-      filter(!is.na(Desirability) & gene != "Control") %>%
+      filter(!is.na(Desirability) & gene != "Control")
+  
+  if(type == "neg"){
+    data %<>%
       rename(D_HCT116 = TvCCvP_NegativeDesi_HCT116, `D_HT-29` = `TvCCvP_NegativeDesi_HT-29`,
              D_RKO = TvCCvP_NegativeDesi_RKO, `D_SW480` = `TvCCvP_NegativeDesi_SW480`,
              LFC_HCT116 = TvC_LFC_HCT116, `LFC_HT-29` = `TvC_LFC_HT-29`, LFC_RKO = TvC_LFC_RKO, LFC_SW480 = TvC_LFC_SW480,
-             Gene = gene) %>%
-      select(Gene, Desirability, D_HCT116, D_SW480, D_RKO, `D_HT-29`, 
-             LFC_HCT116, LFC_SW480, LFC_RKO, `LFC_HT-29`)
-  return(data)
+             Gene = gene)
+  }else{
+    data %<>%
+      rename(D_HCT116 = TvCCvP_PositiveDesi_HCT116, `D_HT-29` = `TvCCvP_PositiveDesi_HT-29`,
+             D_RKO = TvCCvP_PositiveDesi_RKO, `D_SW480` = `TvCCvP_PositiveDesi_SW480`,
+             LFC_HCT116 = TvC_LFC_HCT116, `LFC_HT-29` = `TvC_LFC_HT-29`, LFC_RKO = TvC_LFC_RKO, LFC_SW480 = TvC_LFC_SW480,
+             Gene = gene)
+  }
+  return(data %>%
+           select(Gene, Desirability, D_HCT116, D_SW480, D_RKO, `D_HT-29`, 
+             LFC_HCT116, LFC_SW480, LFC_RKO, `LFC_HT-29`))
 }
 
-cand_df <- prep_4_cand_tbl(data.desir, desir_thresh) %>%
-  mutate(probability_hit = mle_desir_0.8.depl$delta$delta_pos) %>%
-  filter(probability_hit > 0.5) %>%
-  select(-probability_hit) %>%
-  arrange(desc(Desirability))
+
+# Printing candidate table.
+print_cand_table <- function(data, title, subtitle){
+  tab <- data %>%
+    gt() %>%
+    tab_header(title = md(title),
+               subtitle = md(subtitle)) %>%
+    tab_spanner(label = "MAGeCK logFC", columns = c("LFC_HCT116", "LFC_RKO", "LFC_SW480", "LFC_HT-29")) %>%
+    tab_spanner(label = "Desirability", columns = c("D_HCT116", "D_RKO", "D_SW480", "D_HT-29")) %>%
+    fmt_number(columns = vars(Desirability, D_HCT116, D_HCT116, D_SW480, D_RKO, `D_HT-29`,
+                              LFC_HCT116, LFC_SW480, LFC_RKO, `LFC_HT-29`),
+               decimals = 3) %>%
+    cols_align(align = "right", columns = TRUE) %>%
+    data_color(
+      columns = vars(Desirability),
+      colors = scales::col_numeric(
+        palette = paletteer::paletteer_d(
+          palette = "ggsci::red_material"
+        ) %>% as.character(),
+        domain = NULL
+      ),
+      alpha = 0.8
+    ) %>%
+    data_color(columns = vars(D_HCT116,D_SW480,D_RKO,`D_HT-29`),
+               colors = function(x) ifelse(x >= desir_thresh, "palegreen","#808080"),
+        alpha = 0.8) %>%
+    grand_summary_rows(
+      columns = vars(LFC_HCT116,LFC_SW480,LFC_RKO,`LFC_HT-29`),
+      fns = list(Median = "median"),
+      formatter = fmt_number,
+      decimals = 3) %>%
+    cols_label(D_HCT116 = "HCT116", D_SW480 = "SW480", D_RKO = "RKO", `D_HT-29` = "HT-29",
+               LFC_HCT116 = "HCT116", LFC_SW480 = "SW480", LFC_RKO = "RKO", `LFC_HT-29` = "HT-29") %>%
+    tab_options(
+      table.font.size = "80\\%",
+      grand_summary_row.background.color = "#ACEACE80"
+    )
+  return(tab)
+}
 
 ```
 
 # Summary
 
 
+
 # Approach
 
+Four colon cancer cell lines were used in the study and this provides a means to identify shared hits, defined as candidate genes that are shared across two or more cell lines (as opposed to singleton candidates, defined as hits in only one cell line). In the following analysis, we extract and compare:
 
+* **Shared** candidate genes at a False Discovery Rate (FDR) of 10%.
+* **Singleton** candidate genes at an FDR of 10%.
+* **Combined** shared and singleton candidates.
 
-# Sensitivity Analysis
+To identify shared candidates, we employ a Bayesian approach to infer the probability that a given shared hit is a true positive (Jakobsdottir and Weeks 2007) and then use these probabilities to calculate the threshold at which our gene score metric corresponds to an FDR of 10%. The probability that a shared candidate gene $i$ is a true positive given the data is
+
+$$
+P(\delta_{i}=1 \vert  \text{data}) = \frac{\prod_{t=0}^1 p_{t1}^{n_{it}}\theta_1}{\prod_{t=0}^1 p_{t0}^{n_{it}}\theta_0 + \prod_{t=0}^1 p_{t1}^{n_{it}}\theta_1}
+$$
+
+where $p_{t1}$ indicates the false negative rate when $t=0$ and the true positive rate when $t=1$, $\theta_0$ is the prevalence of negatives and $\theta_1$ is the prevalence of positives (all these parameters are Maximum Likelihood Estimates), and $n_{it}$ indicates the number of cell lines in which gene $i$ produced test result $t$ (negative or positive).
+
+Genes are ranked by a Desirability score metric which is based on a combination of FDR p-values and log fold changes (logFC) taken from MAGeCK. A sliding Desirability threshold is then used to determine the threshold at which the FDR of shared hits corresponds to 10% (singleton hits are excluded).
+
+# Shared Hits
 
 ## Desirability Threshold
 
@@ -106,7 +170,7 @@ pl <- desir_perf.depl %>%
   geom_segment(aes(x = 0.67, y = 0.1, xend = 0.8, yend = 0.1), linetype = "dashed") +
   xlab("Desirability Threshold") +
   ylab("FDR of shared hits") +
-  ggtitle("Desirability 10% False Discovery Rate (FDR) Threshold: Depletion")
+  ggtitle("Desirability 10% False Discovery Rate (FDR) Threshold: Depleted genes")
 
 suppressMessages(print(pl))
 
@@ -115,60 +179,155 @@ suppressMessages(print(pl))
 ## Candidate Genes
 
 ```{r}
-cand_df %>%
-  gt() %>%
-  tab_header(title = md("**CDC7** drug-sensitivity candidate genes"),
-             subtitle = md("**Depletion** hits at 10% FDR (ranked by median Desirability)")) %>%
-  tab_spanner(label = "MAGeCK logFC", columns = c("LFC_HCT116", "LFC_RKO", "LFC_SW480", "LFC_HT-29")) %>%
-  tab_spanner(label = "Desirability", columns = c("D_HCT116", "D_RKO", "D_SW480", "D_HT-29")) %>%
-  fmt_number(columns = vars(Desirability, D_HCT116, D_HCT116, D_SW480, D_RKO, `D_HT-29`,
-                            LFC_HCT116, LFC_SW480, LFC_RKO, `LFC_HT-29`),
-             decimals = 3) %>%
-  cols_align(align = "right", columns = TRUE) %>%
-  data_color(
-    columns = vars(Desirability),
-    colors = scales::col_numeric(
-      palette = paletteer::paletteer_d(
-        palette = "ggsci::red_material"
-      ) %>% as.character(),
-      domain = NULL
-    ),
-    alpha = 0.8
-  ) %>%
-  data_color(columns = vars(D_HCT116,D_SW480,D_RKO,`D_HT-29`),
-             colors = function(x) ifelse(x >= desir_thresh, "palegreen","#808080"),
-      alpha = 0.8) %>%
-  grand_summary_rows(
-    columns = vars(LFC_HCT116,LFC_SW480,LFC_RKO,`LFC_HT-29`),
-    fns = list(Median = "median"),
-    formatter = fmt_number,
-    decimals = 3) %>%
-  cols_label(D_HCT116 = "HCT116", D_SW480 = "SW480", D_RKO = "RKO", `D_HT-29` = "HT-29",
-             LFC_HCT116 = "HCT116", LFC_SW480 = "SW480", LFC_RKO = "RKO", `LFC_HT-29` = "HT-29") %>%
-  tab_options(
-    table.font.size = "80\\%",
-    grand_summary_row.background.color = "#ACEACE80"
-  )
+shared_desir <- prep_4_cand_tbl(data.desir, desir_thresh) %>%
+  mutate(probability_hit = mle_desir_0.8.depl$delta$delta_pos)
+
+cand_df <- shared_desir %>%
+  filter(probability_hit > 0.5) %>%
+  select(-probability_hit) %>%
+  arrange(desc(Desirability))
+
+shared_tab <- print_cand_table(cand_df, 
+                               title = "**CDC7** drug-sensitivity candidate genes (**shared** hits)",
+                               subtitle = "**Depleted** hits at 10% FDR (ranked by median Desirability)")
+
+shared_tab
 
 ```
 
 ## GO enrichments
 
-![String-GO](../../project_data/fgc_0005/images/String_GO.png)
+![STRING-GO-shared](../../project_data/fgc_0005/images/String_GO.png)
 
 ## Interactions
 
-![String-Interactions](../../project_data/fgc_0005/images/String_Interactions.png)
+![STRING-Interactions-shared](../../project_data/fgc_0005/images/String_Interactions.png)
 
 
 ## Reactome enrichments
 
-![String-Reactome](../../project_data/fgc_0005/images/String_Reactome.png)
+![STRING-Reactome-shared](../../project_data/fgc_0005/images/String_Reactome.png)
 
-# Enriched Genes
+# Singleton Hits
+
+## Candidate Genes
+
+```{r}
+# Singleton hits.
+singleton_hits <- setdiff((data.mageck %>%
+  filter(neg.fdr <= 0.1))$gene, 
+  cand_df$Gene)
+
+singleton_desir <- prep_4_cand_tbl(data.desir, desir_thresh) %>%
+  mutate(hit = Gene %in% singleton_hits)
+
+cand_df.sgl <- singleton_desir %>%
+  filter(hit) %>%
+  select(-hit) %>%
+  arrange(desc(Desirability))
+
+shared_tab.sgl <- print_cand_table(cand_df.sgl, 
+                               title = "**CDC7** drug-sensitivity candidate genes (**singleton** hits)",
+                               subtitle = "**Depleted** hits at 10% FDR (ranked by median Desirability)")
+
+shared_tab.sgl
+
+```
+
+## GO enrichments
+
+![STRING-GO-singletons](../../project_data/fgc_0005/images/String_GO-singl.png)
+
+## Interactions
+
+![STRING-Interactions-singletons](../../project_data/fgc_0005/images/String_Interactions-singl.png)
+
+## Reactome enrichments
+
+There were no Reactome enrichments.
+
+# Combined Hits
+
+## Candidate Genes
+
+```{r}
+# Combined hits.
+combined_hits <- union((data.mageck %>%
+  filter(neg.fdr <= 0.1))$gene, 
+  cand_df$Gene)
+
+combined_desir <- prep_4_cand_tbl(data.desir, desir_thresh) %>%
+  mutate(hit = Gene %in% combined_hits)
+
+cand_df.comb <- combined_desir %>%
+  filter(hit) %>%
+  select(-hit) %>%
+  arrange(desc(Desirability))
+
+combined_tab.sgl <- print_cand_table(cand_df.comb, 
+                               title = "**CDC7** drug-sensitivity candidate genes (**combined** hits)",
+                               subtitle = "**Depleted** hits at 10% FDR (ranked by median Desirability)")
+
+combined_tab.sgl
+
+```
+
+## GO enrichments
+
+![STRING-GO-combined](../../project_data/fgc_0005/images/String_GO-comb.png)
+
+## Interactions
+
+![STRING-Interactions-combined](../../project_data/fgc_0005/images/String_Interactions-comb.png)
+
+## Reactome enrichments
+
+![STRING-Reactome-combined](../../project_data/fgc_0005/images/String_Reactome-comb.png)
+
+# Over-represented Genes
+
+While the goal of the study was to discover genes that enhance the sensitivity of colon cancer cells exposed to a CDC7 drug, it is also of interest to examine any genes that potentially exhibit over-representation after exposure to the drug.
+
+## Shared Hits
 
 No shared hits with Desirability > 0.9.
 
+## Singleton Hits
+
+### Candidate Genes
+
+```{r}
+# Singleton hits.
+singleton_hits.or <- (data.mageck %>%
+  filter(pos.fdr <= 0.1 & pos.lfc > 0))$gene
+
+singleton_desir.or <- prep_4_cand_tbl(data.desir, desir_thresh, dcol_name = "TvCCvP_PositiveDesi") %>%
+  mutate(hit = Gene %in% singleton_hits.or)
+
+cand_df.sgl.or <- singleton_desir.or %>%
+  filter(hit) %>%
+  select(-hit) %>%
+  arrange(desc(Desirability))
+
+shared_tab.sgl.or <- print_cand_table(cand_df.sgl.or, 
+                               title = "**CDC7** drug over-representation candidate genes (**singleton** hits)",
+                               subtitle = "**Over-represented** hits at 10% FDR (ranked by median Desirability)")
+
+shared_tab.sgl.or
+
+```
+
+### GO enrichments
+
+![STRING-GO-over-represented](../../project_data/fgc_0005/images/String_GO-over-rep.png)
+
+### Interactions
+
+![STRING-Interactions-over-represented](../../project_data/fgc_0005/images/String_Interactions-over-rep.png)
+
+### Reactome enrichments
+
+![STRING-Reactome-over-represented](../../project_data/fgc_0005/images/String_Reactome-over-rep.png)
 
 # QC
 

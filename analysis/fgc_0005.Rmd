@@ -163,6 +163,10 @@ depl_candidates <-  prep_4_mle(data.desir,0.8) %>%
   mutate(probability_hit = mle_desir_0.8.depl$delta$delta_pos,
          gene_hit = probability_hit > 0.5)
 
+# Singleton hits.
+singleton_hits <- setdiff((data.mageck %>%
+  filter(neg.fdr <= 0.1))$gene, depl_candidates$gene[depl_candidates$gene_hit])
+
 ```
 
 ```{r}
