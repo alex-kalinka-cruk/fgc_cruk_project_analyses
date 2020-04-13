@@ -191,7 +191,9 @@ print_cand_table <- function(data, title, subtitle){
 
 # Summary
 
-
+* There are 22 depletion hits that are shared across at least 2 cell lines.
+* The GO biological process 'regulation of cell cycle' is strongly enriched.
+* There are few over-represented genes with the majority a hit in only 1 cell line.
 
 # Approach
 
