@@ -34,6 +34,12 @@ select <- dplyr::select
 rename <- dplyr::rename
 mutate <- dplyr::mutate
 
+# Essential gene sets.
+load("../data/ess.genes.rda")
+
+# Normalized count data.
+norm_lfc_fgc0005 <- readRDS(file=file.path(proj_data.path,"norm_lfc_fgc0005.rds"))
+
 # Slow to run from scratch.
 desir_perf.depl <- readRDS(file="../data/desir_fdr_perf_depleted.rds")
 mle_desir_0.8.depl <- readRDS(file="../data/mle_depleted_desir_thresh_0.8.rds")
@@ -41,6 +47,9 @@ data.mageck <- readRDS(file=file.path(proj_data.path,"data.mageck.rds"))
 
 desir_files <- list.files("~/data/az_cruk/cdc7", 
                           pattern = "DesirabilityGeneRanking.tsv", recursive = T, full.names = T)
+
+count_files <- list.files("~/data/az_cruk/cdc7", 
+                          pattern = "combined_counts.txt", recursive = T, full.names = T)
 
 read_gene_summ <- function(files){
   ret <- NULL
@@ -53,11 +62,57 @@ read_gene_summ <- function(files){
   return(ret)
 }
 
+read_counts <- function(files){
+  ret <- list()
+  for(file in files){
+    cell_line <- gsub("^.*?Comp-(\\S+?)\\/.*$","\\1",file)
+    ret[[cell_line]] <- read.delim(file, header=T, stringsAsFactors = F)
+  }
+  return(ret)
+}
+
 data.desir <- read_gene_summ(desir_files)
 
 ```
 
+```{r,eval=F}
+uncorr.counts <- read_counts(count_files)
+```
+
 ```{r}
+## Function library.
+# Correct library depth in CRISPR count data and annotate essential and non-essential gene groups.
+norm_logfc <- function(data, samples){
+  csums <- colSums(data[,3:ncol(data)])
+  # Use median of controls.
+  mdn.ctrl <- median(csums[grepl("FGC000",names(csums))])
+  data.lfc <- data %>%
+    rowwise() %>%
+    mutate(!!sym(samples[1]) := mdn.ctrl * !!sym(samples[1])/csums[names(csums)==samples[1]],
+           !!sym(samples[2]) := mdn.ctrl * !!sym(samples[2])/csums[names(csums)==samples[2]],
+           Yusa_v3_KO_Plasmid_FGC_batch_1 = mdn.ctrl*Yusa_v3_KO_Plasmid_FGC_batch_1/csums[names(csums)=="Yusa_v3_KO_Plasmid_FGC_batch_1"],
+           Control_Plasmid.logFC.median = log2(median(c(!!sym(samples[1]),!!sym(samples[2])))) - 
+             log2(Yusa_v3_KO_Plasmid_FGC_batch_1),
+           gene_group = case_when(gene %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
+                                  gene %in% ess.genes$bagel_nonessential ~ "non_essential_Bagel",
+                                  gene %in% ess.genes$ribosomal_proteins ~ "ribosomal_proteins",
+                                  TRUE ~ "Other")) %>%
+    ungroup()
+  return(data.lfc)
+}
+
+# Plotting corrected LFC for QC.
+plot_lfc <- function(data, title){
+  pl <- data %>%
+    filter(!gene_group%in%c("Other","ribosomal_proteins")) %>%
+    ggplot(aes(Control_Plasmid.logFC.median, fill=gene_group)) +
+    geom_density(alpha=0.25) +
+    geom_vline(xintercept = 0, linetype="dashed") +
+    xlim(-8,2) +
+    ggtitle(title)
+  print(pl)
+}
+
 # Prep data for printing candidate table.
 prep_4_cand_tbl <- function(data, desir_thresh, dcol_name = "TvCCvP_NegativeDesi"){
   type <- ifelse(grepl("Negative",dcol_name),"neg","pos")
@@ -149,12 +204,12 @@ Four colon cancer cell lines were used in the study and this provides a means to
 To identify shared candidates, we employ a Bayesian approach to infer the probability that a given shared hit is a true positive (Jakobsdottir and Weeks 2007) and then use these probabilities to calculate the threshold at which our gene score metric corresponds to an FDR of 10%. The probability that a shared candidate gene $i$ is a true positive given the data is
 
 $$
-P(\delta_{i}=1 \vert  \text{data}) = \frac{\prod_{t=0}^1 p_{t1}^{n_{it}}\theta_1}{\prod_{t=0}^1 p_{t0}^{n_{it}}\theta_0 + \prod_{t=0}^1 p_{t1}^{n_{it}}\theta_1}
+\text{P}(\delta_{i}=1 \vert  \text{data}) = \frac{\prod_{t=0}^1 p_{t1}^{n_{it}}\theta_1}{\prod_{t=0}^1 p_{t0}^{n_{it}}\theta_0 + \prod_{t=0}^1 p_{t1}^{n_{it}}\theta_1}
 $$
 
-where $p_{t1}$ indicates the false negative rate when $t=0$ and the true positive rate when $t=1$, $\theta_0$ is the prevalence of negatives and $\theta_1$ is the prevalence of positives (all these parameters are Maximum Likelihood Estimates), and $n_{it}$ indicates the number of cell lines in which gene $i$ produced test result $t$ (negative or positive).
+where $p_{t1}$ indicates the false negative rate when $t=0$ and the true positive rate when $t=1$, $\theta_0$ is the prevalence of negatives and $\theta_1$ is the prevalence of positives (all parameters are Maximum Likelihood Estimates), and $n_{it}$ indicates the number of cell lines in which gene $i$ produced test result $t$ (negative or positive).
 
-Genes are ranked by a Desirability score metric which is based on a combination of FDR p-values and log fold changes (logFC) taken from MAGeCK. A sliding Desirability threshold is then used to determine the threshold at which the FDR of shared hits corresponds to 10% (singleton hits are excluded).
+Genes are ranked by a Desirability score metric which is based on a combination of adjusted p-values and log fold changes (logFC) taken from MAGeCK. A sliding Desirability threshold is then used to determine the threshold at which the FDR of shared hits corresponds to 10% (singleton hits are excluded).
 
 # Shared Hits
 
@@ -286,7 +341,7 @@ combined_tab.sgl
 
 # Over-represented Genes
 
-While the goal of the study was to discover genes that enhance the sensitivity of colon cancer cells exposed to a CDC7 drug, it is also of interest to examine any genes that potentially exhibit over-representation after exposure to the drug.
+While the goal of the study was to discover gene knock-outs that enhance the sensitivity of colon cancer cells to a CDC7 drug, it is also of interest to examine any genes that potentially exhibit over-representation after exposure to the drug.
 
 ## Shared Hits
 
@@ -331,20 +386,31 @@ shared_tab.sgl.or
 
 # QC
 
-## HCT116
+```{r, eval=F}
+lfc_hct116 <- norm_logfc(uncorr.counts$HCT116, 
+                         c("FGC0005_01_04_04","FGC0005_01_04_05","FGC0005_01_04_06"))
+lfc_sw480 <- norm_logfc(uncorr.counts$SW480, 
+                         c("FGC0005_01_03_03","FGC0005_01_03_04"))
+lfc_rko<- norm_logfc(uncorr.counts$RKO, 
+                         c("FGC0005_01_02_03","FGC0005_01_02_04"))
+lfc_ht29<- norm_logfc(uncorr.counts$`HT-29`, 
+                         c("FGC0005_01_01_03","FGC0005_01_01_04"))
 
+```
 
-## SW480
+```{r}
+plot_lfc(norm_lfc_fgc0005$HCT116, "HCT116 Control vs Plasmid: essential vs nonessential logFC")
 
+plot_lfc(norm_lfc_fgc0005$SW480, "SW480 Control vs Plasmid: essential vs nonessential logFC")
 
-## RKO
+plot_lfc(norm_lfc_fgc0005$RKO, "RKO Control vs Plasmid: essential vs nonessential logFC")
 
+plot_lfc(norm_lfc_fgc0005$HT29, "HT-29 Control vs Plasmid: essential vs nonessential logFC")
 
-## HT-29
-
+```
 
 # References
 
-
+Jakobsdottir, J. and Weeks, D. E. 2007. Estimating prevalence, false-positive rate, and false-negative rate with use of repeated testing when true responses are unknown. *Am J Hum Genet* **81**: 1111-1113.
 
 
