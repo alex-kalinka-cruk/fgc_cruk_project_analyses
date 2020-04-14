@@ -1,0 +1,71 @@
+---
+title: 'QC screen (HT-29 essentiality) analysis: FGC_0008 and FGC_0009'
+author: "Alex Kalinka"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    depth: 3
+    highlight: tango
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+---
+
+# Setup
+
+```{r,echo=F}
+options(warn=-1)
+
+suppressMessages(library(knitr))
+suppressMessages(library(tidyr))
+suppressMessages(library(magrittr))
+suppressMessages(library(readr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(dplyr))
+
+select <- dplyr::select
+filter <- dplyr::filter
+
+load("../data/ess.genes.rda")
+
+data_base_path <- "~/data/az_cruk"
+
+cleanr_lfc.9.files <- list.files(file.path(data_base_path,"QC_screen-FGC_0009"), 
+                                 pattern = "Control_vs_Plasmid_correctedFCs.tsv", recursive = T, full.names = T)
+
+read_cleanr_lfc <- function(files, project_id){
+  ret <- NULL
+  for(file in files){
+    comp <- gsub("^.*?/(\\S+?_vs_plasmid.*?)/.*$","\\1",file)
+    tp <- gsub("^(\\S+?)_.*$","\\1",comp)
+    ret <- rbind(ret, data.frame(read.delim(file, header=T, stringsAsFactors = F),
+                                 project_id = project_id, comparison = comp, time_point = tp, stringsAsFactors = F))
+  }
+  return(ret %>%
+           mutate(gene_group = case_when(GENE %in% ess.genes$bagel_nonessential ~ "non_essential_Bagel",
+                                         GENE %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
+                                         TRUE ~ "Other")))
+}
+
+lfc_cleanr <- read_cleanr_lfc(cleanr_lfc.9.files, "FGC_0009") %>%
+  mutate(time_point = factor(time_point, levels = c("baseline","d7","d17")))
+
+```
+
+# Log-fold change distributions
+
+```{r}
+lfc_cleanr %>%
+  filter(gene_group != "Other %>%") %>%
+  ggplot(aes(gene_group, correctedFC, color = gene_group)) +
+    geom_point() +
+    geom_boxplot(fill=NA) +
+    geom_hline(yintercept = 0, linetype="dashed") +
+    facet_grid(~time_point) +
+    theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+
+```
+
+
