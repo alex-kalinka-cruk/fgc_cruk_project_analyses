@@ -32,6 +32,9 @@ load("../data/ess.genes.rda")
 
 data_base_path <- "~/data/az_cruk"
 
+cleanr_lfc.8.files <- list.files(file.path(data_base_path,"QC_screen-FGC_0008"), 
+                                 pattern = "Control_vs_Plasmid_correctedFCs.tsv", recursive = T, full.names = T)
+
 cleanr_lfc.9.files <- list.files(file.path(data_base_path,"QC_screen-FGC_0009"), 
                                  pattern = "Control_vs_Plasmid_correctedFCs.tsv", recursive = T, full.names = T)
 
@@ -49,8 +52,9 @@ read_cleanr_lfc <- function(files, project_id){
                                          TRUE ~ "Other")))
 }
 
-lfc_cleanr <- read_cleanr_lfc(cleanr_lfc.9.files, "FGC_0009") %>%
-  mutate(time_point = factor(time_point, levels = c("baseline","d7","d17")))
+lfc_cleanr <- read_cleanr_lfc(cleanr_lfc.8.files, "FGC_0008") %>%
+  rbind(read_cleanr_lfc(cleanr_lfc.9.files, "FGC_0009")) %>%
+  mutate(time_point = factor(time_point, levels = c("baseline","d7","d14","d17")))
 
 ```
 
@@ -58,13 +62,12 @@ lfc_cleanr <- read_cleanr_lfc(cleanr_lfc.9.files, "FGC_0009") %>%
 
 ```{r}
 lfc_cleanr %>%
-  filter(gene_group != "Other %>%") %>%
-  ggplot(aes(gene_group, correctedFC, color = gene_group)) +
-    geom_point() +
-    geom_boxplot(fill=NA) +
+  filter(gene_group != "Other %>%" & !grepl("2_replicates",comparison)) %>%
+  ggplot(aes(project_id, correctedFC, color = gene_group)) +
+    geom_point(position = position_dodge(width=0.75)) +
+    geom_boxplot(notch = T, fill=NA) +
     geom_hline(yintercept = 0, linetype="dashed") +
-    facet_grid(~time_point) +
-    theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+    facet_grid(~time_point)
 
 ```
 
