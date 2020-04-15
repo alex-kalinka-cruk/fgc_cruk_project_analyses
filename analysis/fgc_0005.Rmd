@@ -30,6 +30,8 @@ select <- dplyr::select
 rename <- dplyr::rename
 mutate <- dplyr::mutate
 
+load("../data/ess.genes.rda")
+
 # Slow to run from scratch.
 desir_perf.depl <- readRDS(file="../data/desir_fdr_perf_depleted.rds")
 mle_desir_0.8.depl <- readRDS(file="../data/mle_depleted_desir_thresh_0.8.rds")
@@ -40,6 +42,10 @@ mageck_files <- list.files("~/data/az_cruk/cdc7",
 
 desir_files <- list.files("~/data/az_cruk/cdc7", 
                           pattern = "DesirabilityGeneRanking.tsv", recursive = T, full.names = T)
+bagel_files.ctrl_pl <- list.files("~/data/az_cruk/cdc7",
+                          pattern = "Control_vs_Plasmid.bf", recursive = T, full.names = T)
+bagel_files.treat_pl <- list.files("~/data/az_cruk/cdc7",
+                          pattern = "Treatment_vs_Plasmid.bf", recursive = T, full.names = T)
 
 read_gene_summ <- function(files, type = "mageck"){
   ret <- NULL
@@ -58,10 +64,91 @@ read_gene_summ <- function(files, type = "mageck"){
   return(ret)
 }
 
-data.mageck <- read_gene_summ(mageck_files)
-data.desir <- read_gene_summ(desir_files, type = "desir")
+
+#' add_ROC
+#' 
+#' Adds TPR and FPR columns to a data frame containing TP and a score metric (e.g. Bayes factors).
+#' 
+#' @param data A data frame containing a TP and score column.
+#' @param score_col A character string naming the column to be used as a score column.
+#' 
+#' @return data frame
+#' @import dplyr arrange desc mutate filter select
+#' @import magrittr %<>%
+add_ROC <- function(data, score_col){
+  if(!"TP" %in% colnames(data))
+    stop("expecting to find a 'TP' column in 'data'")
+  if(!score_col %in% colnames(data))
+    stop(paste("expecting to find a",score_col,"column in 'data'"))
+  sc <- sym(score_col)
+  data %<>%
+    dplyr::arrange(dplyr::desc(!!sc)) %>%
+    dplyr::mutate(True_Positive_Rate = cumsum(TP)/sum(TP),
+                  False_Positive_Rate = cumsum(!TP)/sum(!TP))
+  return(data)
+}
+
+
+read_bagel_output <- function(files, ess = "hart"){
+  ret <- NULL
+  if(ess == "hart"){
+    ess_genes <- ess.genes$bagel_essential
+  }else{
+    ess_genes <- ess.genes$pan_cancer_Sanger
+  }
+  for(file in files){
+    cell_line <- gsub("^.*?Comp-(\\S+?)\\/.*$","\\1",file)
+    td <- read.table(file, header=T, stringsAsFactors = F) %>%
+      filter(GENE %in% c(ess_genes, ess.genes$bagel_nonessential)) %>%
+      mutate(TP = GENE %in% ess_genes,
+             cell_line = cell_line) %>%
+      add_ROC(score_col = "BF")
+    ret <- rbind(ret, td)
+  }
+  return(ret)
+}
 
 ```
+
+
+```{r}
+data.mageck <- read_gene_summ(mageck_files)
+data.desir <- read_gene_summ(desir_files, type = "desir")
+data.bagel.ctrl_pl.hart <- read_bagel_output(bagel_files.ctrl_pl)
+data.bagel.treat_pl.hart <- read_bagel_output(bagel_files.treat_pl)
+data.bagel.ctrl_pl.sang <- read_bagel_output(bagel_files.ctrl_pl, ess="sanger")
+data.bagel.treat_pl.sang <- read_bagel_output(bagel_files.treat_pl, ess="sanger")
+```
+
+# QC
+
+```{r}
+ggplot(data.bagel.ctrl_pl.hart,
+       aes(False_Positive_Rate, True_Positive_Rate, color=cell_line)) +
+  geom_line() +
+  geom_abline(linetype="dashed") +
+  ggtitle("ROC Hart essentials: Control vs Plasmid")
+
+ggplot(data.bagel.treat_pl.hart,
+       aes(False_Positive_Rate, True_Positive_Rate, color=cell_line)) +
+  geom_line() +
+  geom_abline(linetype="dashed") +
+  ggtitle("ROC Hart essentials: Treatment vs Plasmid")
+
+ggplot(data.bagel.ctrl_pl.sang,
+       aes(False_Positive_Rate, True_Positive_Rate, color=cell_line)) +
+  geom_line() +
+  geom_abline(linetype="dashed") +
+  ggtitle("ROC Sanger pan-cancer: Control vs Plasmid")
+
+ggplot(data.bagel.treat_pl.sang,
+       aes(False_Positive_Rate, True_Positive_Rate, color=cell_line)) +
+  geom_line() +
+  geom_abline(linetype="dashed") +
+  ggtitle("ROC Sanger pan-cancer: Treatment vs Plasmid")
+
+```
+
 
 # Approach
 
