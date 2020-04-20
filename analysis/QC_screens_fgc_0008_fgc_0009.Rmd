@@ -29,6 +29,7 @@ select <- dplyr::select
 filter <- dplyr::filter
 
 load("../data/ess.genes.rda")
+genes.mod_fitn <- readRDS(file="~/data/az_cruk/depmap/depmap_lfc_modfitn.rds")
 
 data_base_path <- "~/data/az_cruk"
 
@@ -37,6 +38,13 @@ cleanr_lfc.8.files <- list.files(file.path(data_base_path,"QC_screen-FGC_0008"),
 
 cleanr_lfc.9.files <- list.files(file.path(data_base_path,"QC_screen-FGC_0009"), 
                                  pattern = "Control_vs_Plasmid_correctedFCs.tsv", recursive = T, full.names = T)
+
+bagel.8.files <- list.files(file.path(data_base_path,"QC_screen-FGC_0008"), 
+                                 pattern = "Control_vs_Plasmid.bf", recursive = T, full.names = T)
+
+bagel.9.files <- list.files(file.path(data_base_path,"QC_screen-FGC_0009"), 
+                                 pattern = "Control_vs_Plasmid.bf", recursive = T, full.names = T)
+
 
 read_cleanr_lfc <- function(files, project_id){
   ret <- NULL
@@ -52,9 +60,45 @@ read_cleanr_lfc <- function(files, project_id){
                                          TRUE ~ "Other")))
 }
 
+
+read_bagel_output <- function(files, ess = "hart"){
+  ret <- NULL
+  if(length(ess)>1){
+    ess_genes <- ess
+  }else if(ess == "hart"){
+    ess_genes <- ess.genes$bagel_essential
+  }else if(ess == "sanger"){
+    ess_genes <- ess.genes$pan_cancer_Sanger
+  }else{
+    stop(paste("unknown essentiality option",ess))
+  }
+  for(file in files){
+    comp <- gsub("^.*?/(\\S+?_vs_plasmid.*?)/.*$","\\1",file)
+    tp <- gsub("^(\\S+?)_.*$","\\1",comp)
+    td <- read.delim(file, header=T, stringsAsFactors = F) %>%
+      filter(GENE %in% c(ess_genes, ess.genes$bagel_nonessential)) %>%
+      mutate(TP = GENE %in% ess_genes,
+             comparison = comp, time_point = tp) %>%
+      add_ROC(score_col = "BF")
+    ret <- rbind(ret, td)
+  }
+  return(ret)
+}
+
+```
+
+```{r}
+
 lfc_cleanr <- read_cleanr_lfc(cleanr_lfc.8.files, "FGC_0008") %>%
   rbind(read_cleanr_lfc(cleanr_lfc.9.files, "FGC_0009")) %>%
   mutate(time_point = factor(time_point, levels = c("baseline","d7","d14","d17")))
+
+data.bagel.hart.8 <- read_bagel_output(bagel.8.files, ess="hart")
+data.bagel.hart.9 <- read_bagel_output(bagel.9.files, ess="hart")
+data.bagel.sang.8 <- read_bagel_output(bagel.8.files, ess="sanger")
+data.bagel.sang.9 <- read_bagel_output(bagel.9.files, ess="sanger")
+data.bagel.mf.8 <- read_bagel_output(bagel.8.files, ess=genes.mod_fitn)
+data.bagel.mf.9 <- read_bagel_output(bagel.9.files, ess=genes.mod_fitn)
 
 ```
 
@@ -70,5 +114,42 @@ lfc_cleanr %>%
     facet_grid(~time_point)
 
 ```
+
+# Bagel performance
+
+```{r}
+pr.hart <- rbind(get_PRROC(data.bagel.hart.8 %>%
+                             filter(time_point == "d7"),"BF") %>% 
+            mutate(screen="08"),
+          get_PRROC(data.bagel.hart.9 %>%
+                             filter(time_point == "d7"),"BF") %>%
+            mutate(screen="09"))
+
+pr.sang <- rbind(get_PRROC(data.bagel.sang.8 %>%
+                             filter(time_point == "d7"),"BF") %>% 
+            mutate(screen="08"),
+          get_PRROC(data.bagel.sang.9 %>%
+                             filter(time_point == "d7"),"BF") %>%
+            mutate(screen="09"))
+
+pr.mf <- rbind(get_PRROC(data.bagel.mf.8 %>%
+                             filter(time_point == "d7"),"BF") %>% 
+            mutate(screen="08"),
+          get_PRROC(data.bagel.mf.9 %>%
+                             filter(time_point == "d7"),"BF") %>%
+            mutate(screen="09"))
+
+
+ggplot(pr.sang, aes(Recall,Precision,color=screen)) +
+  geom_line()
+
+ggplot(pr.hart, aes(Recall,Precision,color=screen)) +
+  geom_line()
+
+ggplot(pr.mf, aes(Recall,Precision,color=screen)) +
+  geom_line()
+
+```
+
 
 
