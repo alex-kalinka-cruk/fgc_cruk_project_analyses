@@ -164,7 +164,8 @@ counts.9 <- read_counts(counts.9.files)
 
 lfc_cleanr <- read_cleanr_lfc(cleanr_lfc.8.files, "FGC_0008") %>%
   rbind(read_cleanr_lfc(cleanr_lfc.9.files, "FGC_0009")) %>%
-  mutate(time_point = factor(time_point, levels = c("baseline","d7","d14","d17")))
+  mutate(time_point = factor(time_point, levels = c("baseline","d7","d14","d17"))) %>%
+  left_join(yusa.v3, by = c("SEQID" = "CODE"))
 
 data.bagel.hart.8 <- read_bagel_output(bagel.8.files, ess="hart")
 data.bagel.hart.9 <- read_bagel_output(bagel.9.files, ess="hart")
@@ -304,6 +305,20 @@ nnmd %>%
 
 ```
 
+## GC content
+
+```{r}
+lfc_cleanr %>%
+  filter(comparison %in% c("d7_vs_plasmid_2_replicates_combn1","d7_vs_plasmid_QC") & between(GC_percent,20,75)) %>%
+  mutate(GC_percent = factor(round(GC_percent))) %>%
+  ggplot(aes(GC_percent, correctedFC, color=project_id)) + 
+  geom_point(position = position_dodge(width=0.75)) + 
+  geom_boxplot(notch=T) +
+  ylim(-3,1.5) +
+  geom_hline(yintercept = 0, linetype="dashed") +
+  ggtitle("logFC Day 7 vs sgRNA GC content")
+
+```
 
 # Bagel performance
 
