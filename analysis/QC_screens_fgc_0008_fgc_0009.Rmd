@@ -145,6 +145,19 @@ read_counts <- function(files){
 ```
 
 ```{r}
+# Yusa v3 with gRNA sequences.
+yusa.v3 <- read.delim("~/data/az_cruk/cleanr.tsv", stringsAsFactors = F, header=T) %>%
+  rowwise() %>%
+  mutate(GC_percent = 100*(sum(unlist(strsplit(seq,"")) == "G") + sum(unlist(strsplit(seq,"")) == "C"))/19,
+         pam_upstream4 = substr(seq,16,19),
+         proximal_4bases_pam = case_when(grepl("TT",pam_upstream4) ~ "TT",
+                                         grepl("GCC",pam_upstream4) ~ "GCC",
+                                         TRUE ~ "Other")) %>%
+  ungroup()
+
+```
+
+```{r}
 # Read data.
 counts.8 <- read_counts(counts.8.files)
 counts.9 <- read_counts(counts.9.files)
