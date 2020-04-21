@@ -250,9 +250,47 @@ lfc_cleanr %>%
 ## Null-normalized mean difference (NNMD)
 
 ```{r}
+## NNMD
+nnmd <- rbind(
+  lfc_cleanr %>%
+    group_by(comparison) %>%
+    do(data.frame(project_id = .$project_id[1], time_point = .$time_point[1], num_reps = .$num_reps[1],
+       NNMD = calc_glass_delta(., "GENE", "correctedFC", ess.genes$pan_cancer_Sanger, ess.genes$bagel_nonessential))) %>%
+    ungroup() %>%
+    mutate(gene_group = "pan_cancer_Sanger"),
+  lfc_cleanr %>%
+    group_by(comparison) %>%
+    do(data.frame(project_id = .$project_id[1], time_point = .$time_point[1], num_reps = .$num_reps[1],
+       NNMD = calc_glass_delta(., "GENE", "correctedFC", ess.genes$bagel_essential, ess.genes$bagel_nonessential))) %>%
+    ungroup() %>%
+    mutate(gene_group = "essential_Hart"),
+  lfc_cleanr %>%
+    group_by(comparison) %>%
+    do(data.frame(project_id = .$project_id[1], time_point = .$time_point[1], num_reps = .$num_reps[1],
+       NNMD = calc_glass_delta(., "GENE", "correctedFC", genes.mod_fitn, ess.genes$bagel_nonessential))) %>%
+    ungroup() %>%
+    mutate(gene_group = "moderately_negative")
+)
+  
+nnmd %>%
+  filter(project_id == "FGC_0008") %>%
+  mutate(time_point = factor(time_point,levels=c("baseline","d7","d14"))) %>%
+  ggplot(aes(time_point, NNMD, group = gene_group, color = gene_group)) +
+  geom_point() +
+  geom_line() +
+  facet_grid(~num_reps) +
+  ggtitle("NNMD: FGC_0008, 2 vs 3 replicates")
 
+nnmd %>%
+  filter(comparison %in% c("d7_vs_plasmid_2_replicates_combn1","d7_vs_plasmid_QC")) %>%
+  ggplot(aes(project_id, NNMD, group = gene_group, color = gene_group)) +
+  geom_point() +
+  geom_line() +
+  facet_grid(~time_point) +
+  ggtitle("NNMD: 2 replicates, Day 7")
 
 ```
+
 
 # Bagel performance
 
