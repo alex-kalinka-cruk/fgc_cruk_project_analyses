@@ -25,6 +25,7 @@ suppressMessages(library(readr))
 suppressMessages(library(ggplot2))
 suppressMessages(library(dplyr))
 suppressMessages(library(crispRutils))
+suppressMessages(library(GICC))
 
 select <- dplyr::select
 filter <- dplyr::filter
@@ -33,6 +34,12 @@ load("../data/ess.genes.rda")
 genes.mod_fitn <- readRDS(file="~/data/az_cruk/depmap/depmap_lfc_modfitn.rds")
 
 data_base_path <- "~/data/az_cruk"
+
+counts.8.files <- list.files(file.path(data_base_path,"QC_screen-FGC_0008"), 
+                                 pattern = "combined_counts.txt", recursive = T, full.names = T)
+
+counts.9.files <- list.files(file.path(data_base_path,"QC_screen-FGC_0009"), 
+                                 pattern = "combined_counts.txt", recursive = T, full.names = T)
 
 cleanr_lfc.8.files <- list.files(file.path(data_base_path,"QC_screen-FGC_0008"), 
                                  pattern = "Control_vs_Plasmid_correctedFCs.tsv", recursive = T, full.names = T)
@@ -45,6 +52,17 @@ bagel.8.files <- list.files(file.path(data_base_path,"QC_screen-FGC_0008"),
 
 bagel.9.files <- list.files(file.path(data_base_path,"QC_screen-FGC_0009"), 
                                  pattern = "Control_vs_Plasmid.bf", recursive = T, full.names = T)
+
+# Read functions.
+
+read_counts <- function(files, project_id){
+  ret <- list()
+  for(file in files){
+    comp <- gsub("^.*?/(\\S+?_vs_plasmid.*?)/.*$","\\1",file)
+    ret[[comp]] <- read.delim(file, header=T, stringsAsFactors = F)
+  }
+  return(ret)
+}
 
 
 read_cleanr_lfc <- function(files, project_id){
@@ -60,6 +78,7 @@ read_cleanr_lfc <- function(files, project_id){
   return(ret %>%
            mutate(gene_group = case_when(GENE %in% ess.genes$bagel_nonessential ~ "non_essential_Bagel",
                                          GENE %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
+                                         GENE %in% genes.mod_fitn ~ "moderately_negative"
                                          TRUE ~ "Other")))
 }
 
@@ -90,14 +109,47 @@ read_bagel_output <- function(files, ess = "hart"){
   return(ret)
 }
 
+
+norm_counts <- function(data){
+  samples <- colnames(data)[grepl("^FGC",colnames(data))]
+  csums <- colSums(data[,3:ncol(data)])
+  # Use median of controls for scaling normalized data.
+  mdn.ctrl <- median(csums[grepl("FGC",names(csums))])
+  data.norm <- data %>%
+    mutate(!!sym(samples[1]) := mdn.ctrl * !!sym(samples[1])/csums[names(csums)==samples[1]],
+         !!sym(samples[2]) := mdn.ctrl * !!sym(samples[2])/csums[names(csums)==samples[2]],
+         gene_group = case_when(gene %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
+                                gene %in% ess.genes$bagel_nonessential ~ "non_essential_Bagel",
+                                gene %in% genes.mod_fitn ~ "moderately_negative",
+                                TRUE ~ "Other"))
+  if(length(samples) == 3){
+    data.norm %<>%
+      mutate(!!sym(samples[3]) := mdn.ctrl * !!sym(samples[3])/csums[names(csums)==samples[3]])
+  }
+  return(data.norm)
+}
+
+
+read_counts <- function(files){
+  ret <- list()
+  for(file in files){
+    comp <- gsub("^.*?/(\\S+?_vs_plasmid.*?)/.*$","\\1",file)
+    ret[[comp]] <- read.delim(file) %>%
+      norm_counts()
+  }
+  return(ret)
+}
+
 ```
 
 ```{r}
+# Read data.
+counts.8 <- read_counts(counts.8.files)
+counts.9 <- read_counts(counts.9.files)
 
 lfc_cleanr <- read_cleanr_lfc(cleanr_lfc.8.files, "FGC_0008") %>%
   rbind(read_cleanr_lfc(cleanr_lfc.9.files, "FGC_0009")) %>%
-  mutate(time_point = factor(time_point, levels = c("baseline","d7","d14","d17")),
-         gene_group = ifelse(GENE %in% genes.mod_fitn, "moderately_negative", gene_group))
+  mutate(time_point = factor(time_point, levels = c("baseline","d7","d14","d17")))
 
 data.bagel.hart.8 <- read_bagel_output(bagel.8.files, ess="hart")
 data.bagel.hart.9 <- read_bagel_output(bagel.9.files, ess="hart")
@@ -105,6 +157,30 @@ data.bagel.sang.8 <- read_bagel_output(bagel.8.files, ess="sanger")
 data.bagel.sang.9 <- read_bagel_output(bagel.9.files, ess="sanger")
 data.bagel.mf.8 <- read_bagel_output(bagel.8.files, ess=genes.mod_fitn)
 data.bagel.mf.9 <- read_bagel_output(bagel.9.files, ess=genes.mod_fitn)
+
+```
+
+# Reproducibility of counts
+
+```{r}
+run_gicc <- function(data){
+  samps <- colnames(data)[3:(ncol(data)-1)]
+  samps[grepl("^FGC",samps)] <- "control"
+  td <- data.frame(id = samps, data[,3:(ncol(data)-1)])
+  
+}
+
+calc_gicc <- function(data_list){
+  ret <- NULL
+  for(comp in names(data_list)){
+    tp <- gsub("^(\\S+?)_.*$","\\1",comp)
+    num_reps <- gsub("^.*?vs_plasmid_(._replicates.*)$","\\1",comp)
+    td <- data_list[[comp]] %>%
+      filter(gene_group != "Other") %>%
+      group_by(gene_group) %>%
+      do(data.frame())
+  }
+}
 
 ```
 
@@ -133,8 +209,15 @@ lfc_cleanr %>%
     geom_point(position = position_dodge(width=0.75)) +
     geom_boxplot(notch = T, fill=NA) +
     geom_hline(yintercept = 0, linetype="dashed") +
-    facet_grid(~time_point) +
-    ggtitle("logFC (corrected): FGC_0008: 2 vs 3 replicates")
+    facet_grid(time_point~num_reps, space="free_x", scales="free_x") +
+    ggtitle("Day 7 logFC (corrected): FGC_0008: 2 vs 3 replicates")
+
+```
+
+## Null-normalized mean difference (NNMD)
+
+```{r}
+
 
 ```
 
