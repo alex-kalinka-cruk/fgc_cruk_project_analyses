@@ -118,8 +118,10 @@ norm_counts <- function(data){
   data.norm <- data %>%
     mutate(!!sym(samples[1]) := mdn.ctrl * !!sym(samples[1])/csums[names(csums)==samples[1]],
          !!sym(samples[2]) := mdn.ctrl * !!sym(samples[2])/csums[names(csums)==samples[2]],
+         Yusa_v3_KO_Plasmid_FGC_batch_1 = mdn.ctrl*Yusa_v3_KO_Plasmid_FGC_batch_1/csums[names(csums)=="Yusa_v3_KO_Plasmid_FGC_batch_1"],
          gene_group = case_when(gene %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
-                                gene %in% ess.genes$bagel_nonessential ~ "non_essential_Bagel",
+                                gene %in% ess.genes$bagel_nonessential ~ "non_essential_Hart",
+                                gene %in% ess.genes$bagel_essential ~ "essential_Hart",
                                 gene %in% genes.mod_fitn ~ "moderately_negative",
                                 TRUE ~ "Other"))
   if(length(samples) == 3){
@@ -166,8 +168,9 @@ data.bagel.mf.9 <- read_bagel_output(bagel.9.files, ess=genes.mod_fitn)
 run_gicc <- function(data){
   samps <- colnames(data)[3:(ncol(data)-1)]
   samps[grepl("^FGC",samps)] <- "control"
-  td <- data.frame(id = samps, data[,3:(ncol(data)-1)])
-  
+  td <- data.frame(id = samps, t(data[,3:(ncol(data)-1)]), stringsAsFactors = F)
+  gicc <- GICC(td)
+  return(gicc$GICC$GICC.1)
 }
 
 calc_gicc <- function(data_list){
@@ -178,9 +181,39 @@ calc_gicc <- function(data_list){
     td <- data_list[[comp]] %>%
       filter(gene_group != "Other") %>%
       group_by(gene_group) %>%
-      do(data.frame())
+      do(data.frame(comparison = comp, time_point = tp, num_reps = num_reps,
+                    GICC = run_gicc(.), stringsAsFactors = F))
+    ret <- rbind(ret, td)
   }
+  return(ret)
 }
+
+```
+
+```{r}
+gicc.counts <- calc_gicc(counts.8) %>%
+  mutate(project_id = "FGC_0008") %>%
+  rbind(calc_gicc(counts.9) %>%
+          mutate(project_id = "FGC_0009"))
+
+gicc.counts %>% 
+  filter(project_id == "FGC_0008") %>%
+  mutate(time_point = factor(time_point,levels=c("baseline","d7","d14"))) %>%
+  ggplot(aes(time_point, GICC, group=gene_group, color=gene_group)) +
+  geom_point() +
+  geom_line() +
+  geom_hline(yintercept = 0.6, linetype = "dashed") +
+  facet_grid(~num_reps) +
+  ggtitle("Reproducibility of normalized counts: FGC_0008, 2 vs 3 replicates")
+
+gicc.counts %>%
+  filter(comparison %in% c("d7_vs_plasmid_2_replicates_combn1","d7_vs_plasmid_QC")) %>%
+  ggplot(aes(project_id, GICC, group=gene_group, color=gene_group)) +
+  geom_point() +
+  geom_line() +
+  geom_hline(yintercept = 0.6, linetype = "dashed") +
+  facet_grid(~time_point) +
+  ggtitle("Reproducibility of normalized counts: 2 replicates, Day 7")
 
 ```
 
