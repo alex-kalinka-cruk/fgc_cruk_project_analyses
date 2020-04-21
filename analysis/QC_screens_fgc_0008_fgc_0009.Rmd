@@ -24,6 +24,7 @@ suppressMessages(library(magrittr))
 suppressMessages(library(readr))
 suppressMessages(library(ggplot2))
 suppressMessages(library(dplyr))
+suppressMessages(library(crispRutils))
 
 select <- dplyr::select
 filter <- dplyr::filter
@@ -51,8 +52,10 @@ read_cleanr_lfc <- function(files, project_id){
   for(file in files){
     comp <- gsub("^.*?/(\\S+?_vs_plasmid.*?)/.*$","\\1",file)
     tp <- gsub("^(\\S+?)_.*$","\\1",comp)
+    num_reps <- gsub("^.*?vs_plasmid_(._replicates.*)$","\\1",comp)
     ret <- rbind(ret, data.frame(read.delim(file, header=T, stringsAsFactors = F),
-                                 project_id = project_id, comparison = comp, time_point = tp, stringsAsFactors = F))
+                                 project_id = project_id, comparison = comp, time_point = tp, 
+                                 num_reps = num_reps, stringsAsFactors = F))
   }
   return(ret %>%
            mutate(gene_group = case_when(GENE %in% ess.genes$bagel_nonessential ~ "non_essential_Bagel",
@@ -75,10 +78,12 @@ read_bagel_output <- function(files, ess = "hart"){
   for(file in files){
     comp <- gsub("^.*?/(\\S+?_vs_plasmid.*?)/.*$","\\1",file)
     tp <- gsub("^(\\S+?)_.*$","\\1",comp)
+    num_reps <- gsub("^.*?vs_plasmid_(._replicates.*)$","\\1",comp)
     td <- read.delim(file, header=T, stringsAsFactors = F) %>%
       filter(GENE %in% c(ess_genes, ess.genes$bagel_nonessential)) %>%
       mutate(TP = GENE %in% ess_genes,
-             comparison = comp, time_point = tp) %>%
+             comparison = comp, time_point = tp,
+             replicates = num_reps) %>%
       add_ROC(score_col = "BF")
     ret <- rbind(ret, td)
   }
@@ -91,7 +96,8 @@ read_bagel_output <- function(files, ess = "hart"){
 
 lfc_cleanr <- read_cleanr_lfc(cleanr_lfc.8.files, "FGC_0008") %>%
   rbind(read_cleanr_lfc(cleanr_lfc.9.files, "FGC_0009")) %>%
-  mutate(time_point = factor(time_point, levels = c("baseline","d7","d14","d17")))
+  mutate(time_point = factor(time_point, levels = c("baseline","d7","d14","d17")),
+         gene_group = ifelse(GENE %in% genes.mod_fitn, "moderately_negative", gene_group))
 
 data.bagel.hart.8 <- read_bagel_output(bagel.8.files, ess="hart")
 data.bagel.hart.9 <- read_bagel_output(bagel.9.files, ess="hart")
@@ -104,52 +110,88 @@ data.bagel.mf.9 <- read_bagel_output(bagel.9.files, ess=genes.mod_fitn)
 
 # Log-fold change distributions
 
+## 2 replicates
+
 ```{r}
 lfc_cleanr %>%
-  filter(gene_group != "Other %>%" & !grepl("2_replicates",comparison)) %>%
+  filter(gene_group != "Other" & (grepl("combn1",comparison) || grepl("QC",comparison))) %>%
   ggplot(aes(project_id, correctedFC, color = gene_group)) +
     geom_point(position = position_dodge(width=0.75)) +
     geom_boxplot(notch = T, fill=NA) +
     geom_hline(yintercept = 0, linetype="dashed") +
-    facet_grid(~time_point)
+    facet_grid(~time_point) +
+    ggtitle("logFC (corrected): 2 replicates")
+
+```
+
+## 2 vs 3 replicates
+
+```{r}
+lfc_cleanr %>%
+  filter(gene_group != "Other" & project_id == "FGC_0008" & time_point == "d7") %>%
+  ggplot(aes(num_reps, correctedFC, color = gene_group)) +
+    geom_point(position = position_dodge(width=0.75)) +
+    geom_boxplot(notch = T, fill=NA) +
+    geom_hline(yintercept = 0, linetype="dashed") +
+    facet_grid(~time_point) +
+    ggtitle("logFC (corrected): FGC_0008: 2 vs 3 replicates")
 
 ```
 
 # Bagel performance
 
+## Precision-Recall
+
 ```{r}
-pr.hart <- rbind(get_PRROC(data.bagel.hart.8 %>%
-                             filter(time_point == "d7"),"BF") %>% 
-            mutate(screen="08"),
-          get_PRROC(data.bagel.hart.9 %>%
-                             filter(time_point == "d7"),"BF") %>%
+pr.hart <- rbind(data.bagel.hart.8 %>%
+                   filter(time_point == "d7") %>%
+                   group_by(replicates) %>%
+                   do(data.frame(get_PRROC(., "BF", group_col = "replicates"))) %>% 
+                   mutate(screen="08"),
+          data.bagel.hart.9 %>%
+            filter(time_point == "d7") %>%
+            group_by(replicates) %>% 
+            do(data.frame(get_PRROC(., "BF", group_col = "replicates"))) %>%
             mutate(screen="09"))
 
-pr.sang <- rbind(get_PRROC(data.bagel.sang.8 %>%
-                             filter(time_point == "d7"),"BF") %>% 
-            mutate(screen="08"),
-          get_PRROC(data.bagel.sang.9 %>%
-                             filter(time_point == "d7"),"BF") %>%
+pr.sang <- rbind(data.bagel.sang.8 %>%
+                   filter(time_point == "d7") %>%
+                   group_by(replicates) %>%
+                   do(data.frame(get_PRROC(., "BF", group_col = "replicates"))) %>% 
+                   mutate(screen="08"),
+          data.bagel.sang.9 %>%
+            filter(time_point == "d7") %>%
+            group_by(replicates) %>% 
+            do(data.frame(get_PRROC(., "BF", group_col = "replicates"))) %>%
             mutate(screen="09"))
 
-pr.mf <- rbind(get_PRROC(data.bagel.mf.8 %>%
-                             filter(time_point == "d7"),"BF") %>% 
-            mutate(screen="08"),
-          get_PRROC(data.bagel.mf.9 %>%
-                             filter(time_point == "d7"),"BF") %>%
+pr.mf <- rbind(data.bagel.mf.8 %>%
+                   filter(time_point == "d7") %>%
+                   group_by(replicates) %>%
+                   do(data.frame(get_PRROC(., "BF", group_col = "replicates"))) %>% 
+                   mutate(screen="08"),
+          data.bagel.mf.9 %>%
+            filter(time_point == "d7") %>%
+            group_by(replicates) %>% 
+            do(data.frame(get_PRROC(., "BF", group_col = "replicates"))) %>%
             mutate(screen="09"))
 
 
-ggplot(pr.sang, aes(Recall,Precision,color=screen)) +
-  geom_line()
+ggplot(pr.sang, aes(Recall,Precision,color=screen, group=replicates)) +
+  geom_line() +
+  geom_hline(yintercept = 0.5, linetype = "dashed") +
+  ggtitle("Precision-Recall curve: Sanger pan-cancer genes")
 
-ggplot(pr.hart, aes(Recall,Precision,color=screen)) +
-  geom_line()
+ggplot(pr.hart, aes(Recall,Precision,color=screen, group=replicates)) +
+  geom_line() +
+  geom_hline(yintercept = 0.5, linetype = "dashed") +
+  ggtitle("Precision-Recall curve: Hart essentials")
 
-ggplot(pr.mf, aes(Recall,Precision,color=screen)) +
-  geom_line()
+ggplot(pr.mf, aes(Recall,Precision,color=screen, group=replicates)) +
+  geom_line() +
+  geom_hline(yintercept = 0.5, linetype = "dashed") +
+  ggtitle("Precision-Recall curve: Moderately Negative fitness genes (DepMap)")
 
 ```
-
 
 
