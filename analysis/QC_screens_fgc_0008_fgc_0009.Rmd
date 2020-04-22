@@ -76,8 +76,9 @@ read_cleanr_lfc <- function(files, project_id){
                                  num_reps = num_reps, stringsAsFactors = F))
   }
   return(ret %>%
-           mutate(gene_group = case_when(GENE %in% ess.genes$bagel_nonessential ~ "non_essential_Bagel",
+           mutate(gene_group = case_when(GENE %in% ess.genes$bagel_nonessential ~ "non_essential_Hart",
                                          GENE %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
+                                         GENE %in% ess.genes$bagel_essential ~ "essential_Hart",
                                          GENE %in% genes.mod_fitn ~ "moderately_negative",
                                          TRUE ~ "Other")))
 }
@@ -251,7 +252,7 @@ lfc_cleanr %>%
   filter(gene_group != "Other" & (grepl("combn1",comparison) | grepl("QC",comparison))) %>%
   ggplot(aes(project_id, correctedFC, color = gene_group)) +
     geom_point(position = position_dodge(width=0.75)) +
-    geom_boxplot(notch = T, fill=NA) +
+    geom_boxplot(notch = T) +
     geom_hline(yintercept = 0, linetype="dashed") +
     facet_grid(~time_point) +
     ggtitle("logFC (corrected): 2 replicates")
@@ -265,7 +266,7 @@ lfc_cleanr %>%
   filter(gene_group != "Other" & project_id == "FGC_0008" & time_point == "d7") %>%
   ggplot(aes(num_reps, correctedFC, color = gene_group)) +
     geom_point(position = position_dodge(width=0.75)) +
-    geom_boxplot(notch = T, fill=NA) +
+    geom_boxplot(notch = T) +
     geom_hline(yintercept = 0, linetype="dashed") +
     facet_grid(time_point~num_reps, space="free_x", scales="free_x") +
     ggtitle("Day 7 logFC (corrected): FGC_0008: 2 vs 3 replicates")
@@ -327,7 +328,7 @@ lfc_cleanr %>%
   geom_boxplot(notch=T) +
   ylim(-3,1.5) +
   geom_hline(yintercept = 0, linetype="dashed") +
-  ggtitle("logFC Day 7 vs sgRNA GC content")
+  ggtitle("logFC Day 7 vs sgRNA GC content (2 replicates)")
 
 ```
 
@@ -390,6 +391,39 @@ ggplot(pr.mf, aes(Recall,Precision,color=screen, group=replicates)) +
   geom_segment(aes(x = 0.75, y = 0.2, xend = 0.75, yend = 0.9), linetype = "dashed", color="black") +
   geom_segment(aes(x = 0.71, y = 0.2, xend = 0.71, yend = 0.9), linetype = "dashed", color="black") +
   ggtitle("Precision-Recall: Day 7, 2 reps, Moderately Negative fitness genes (DepMap)")
+
+pr.sang.later <- rbind(data.bagel.sang.8 %>%
+                   filter(time_point == "d14") %>%
+                   group_by(replicates) %>%
+                   do(data.frame(Bget_PRROC(., "BF", group_col = "replicates"))) %>% 
+                   mutate(screen="08"),
+          data.bagel.sang.9 %>%
+            filter(time_point == "d17") %>%
+            group_by(replicates) %>% 
+            do(data.frame(Bget_PRROC(., "BF", group_col = "replicates"))) %>%
+            mutate(screen="09"))
+
+pr.hart.later <- rbind(data.bagel.hart.8 %>%
+                   filter(time_point == "d14") %>%
+                   group_by(replicates) %>%
+                   do(data.frame(Bget_PRROC(., "BF", group_col = "replicates"))) %>% 
+                   mutate(screen="08"),
+          data.bagel.hart.9 %>%
+            filter(time_point == "d17") %>%
+            group_by(replicates) %>% 
+            do(data.frame(Bget_PRROC(., "BF", group_col = "replicates"))) %>%
+            mutate(screen="09"))
+
+pr.mf <- rbind(data.bagel.mf.8 %>%
+                   filter(time_point == "d7") %>%
+                   group_by(replicates) %>%
+                   do(data.frame(get_PRROC(., "BF", group_col = "replicates"))) %>% 
+                   mutate(screen="08"),
+          data.bagel.mf.9 %>%
+            filter(time_point == "d7") %>%
+            group_by(replicates) %>% 
+            do(data.frame(get_PRROC(., "BF", group_col = "replicates"))) %>%
+            mutate(screen="09"))
 
 ```
 
