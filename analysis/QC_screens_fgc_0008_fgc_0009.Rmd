@@ -32,6 +32,7 @@ filter <- dplyr::filter
 
 load("../data/ess.genes.rda")
 genes.mod_fitn <- readRDS(file="~/data/az_cruk/depmap/depmap_lfc_modfitn.rds")
+mouse_dnds.ess <- readRDS(file = "../data/mouse_dnds.essential_genes.rds")
 
 data_base_path <- "~/data/az_cruk"
 
@@ -54,7 +55,6 @@ bagel.9.files <- list.files(file.path(data_base_path,"QC_screen-FGC_0009"),
                                  pattern = "Control_vs_Plasmid.bf", recursive = T, full.names = T)
 
 # Read functions.
-
 read_counts <- function(files, project_id){
   ret <- list()
   for(file in files){
@@ -78,7 +78,7 @@ read_cleanr_lfc <- function(files, project_id){
   return(ret %>%
            mutate(gene_group = case_when(GENE %in% ess.genes$bagel_nonessential ~ "non_essential_Bagel",
                                          GENE %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
-                                         GENE %in% genes.mod_fitn ~ "moderately_negative"
+                                         GENE %in% genes.mod_fitn ~ "moderately_negative",
                                          TRUE ~ "Other")))
 }
 
@@ -176,6 +176,17 @@ data.bagel.mf.9 <- read_bagel_output(bagel.9.files, ess=genes.mod_fitn)
 
 ```
 
+# Moderately negative fitness defect gene group
+
+```{r}
+ggplot(mouse.dnds, aes(gene_group, dn_ds.mouse, color = gene_group)) +
+  geom_point() +
+  geom_boxplot(notch=T) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  ggtitle("dN/dS human-mouse: Essential gene groups")
+
+```
+
 # Reproducibility of counts
 
 ```{r}
@@ -237,7 +248,7 @@ gicc.counts %>%
 
 ```{r}
 lfc_cleanr %>%
-  filter(gene_group != "Other" & (grepl("combn1",comparison) || grepl("QC",comparison))) %>%
+  filter(gene_group != "Other" & (grepl("combn1",comparison) | grepl("QC",comparison))) %>%
   ggplot(aes(project_id, correctedFC, color = gene_group)) +
     geom_point(position = position_dodge(width=0.75)) +
     geom_boxplot(notch = T, fill=NA) +
@@ -362,17 +373,45 @@ pr.mf <- rbind(data.bagel.mf.8 %>%
 ggplot(pr.sang, aes(Recall,Precision,color=screen, group=replicates)) +
   geom_line() +
   geom_hline(yintercept = 0.5, linetype = "dashed") +
-  ggtitle("Precision-Recall curve: Sanger pan-cancer genes")
+  ggtitle("Precision-Recall: Day 7, 2 reps, Sanger pan-cancer genes")
 
 ggplot(pr.hart, aes(Recall,Precision,color=screen, group=replicates)) +
   geom_line() +
   geom_hline(yintercept = 0.5, linetype = "dashed") +
-  ggtitle("Precision-Recall curve: Hart essentials")
+  geom_segment(aes(x = 0.75, y = 0.9, xend = -0.02, yend = 0.9), linetype = "dashed", color="black") +
+  geom_segment(aes(x = 0.75, y = 0.3, xend = 0.75, yend = 0.9), linetype = "dashed", color="black") +
+  geom_segment(aes(x = 0.746, y = 0.3, xend = 0.746, yend = 0.9), linetype = "dashed", color="black") +
+  ggtitle("Precision-Recall: Day 7, 2 reps, Hart essentials")
 
 ggplot(pr.mf, aes(Recall,Precision,color=screen, group=replicates)) +
   geom_line() +
   geom_hline(yintercept = 0.5, linetype = "dashed") +
-  ggtitle("Precision-Recall curve: Moderately Negative fitness genes (DepMap)")
+  geom_segment(aes(x = 0.75, y = 0.9, xend = -0.02, yend = 0.9), linetype = "dashed", color="black") +
+  geom_segment(aes(x = 0.75, y = 0.2, xend = 0.75, yend = 0.9), linetype = "dashed", color="black") +
+  geom_segment(aes(x = 0.71, y = 0.2, xend = 0.71, yend = 0.9), linetype = "dashed", color="black") +
+  ggtitle("Precision-Recall: Day 7, 2 reps, Moderately Negative fitness genes (DepMap)")
+
+```
+
+## Bayes Factor threshold of 6
+
+```{r}
+# All genes.
+bagel.all.thresh <- read_bagel_output(bagel.8.files, ess=unique(yusa.v3$GENES)) %>%
+  mutate(project_id = "FGC_0008") %>%
+  rbind(data.bagel.all.9 <- read_bagel_output(bagel.9.files, ess=unique(yusa.v3$GENES)) %>%
+          mutate(project_id = "FGC_0009")) %>%
+  group_by(project_id, time_point, comparison) %>%
+  summarise(Num_genes_above_BF_6 = length(which(BF >= 6))) %>%
+  ungroup() %>%
+  mutate(time_point = factor(time_point, levels=c("baseline","d7","d14","d17")))
+
+bagel.all.thresh %>%
+  filter((grepl("combn1",comparison) | grepl("QC",comparison))) %>%
+  ggplot(aes(project_id, Num_genes_above_BF_6, fill = project_id)) +
+  geom_bar(stat = "identity") +
+  facet_grid(~time_point) +
+  ggtitle("Number of genes with BF > 6: 2 replicates")
 
 ```
 
