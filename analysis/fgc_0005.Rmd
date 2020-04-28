@@ -44,6 +44,7 @@ mle_desir_0.8.depl <- readRDS(file="../data/mle_depleted_desir_thresh_0.8.rds")
 mageck_files <- list.files("~/data/az_cruk/cdc7", 
                            pattern = "Treatment_vs_Control.gene_summary.txt", recursive = T, full.names = T)
 
+count_files <- list.files("~/data/az_cruk/cdc7", pattern="combined_counts.txt", recursive=T, full.names=T)
 desir_files <- list.files("~/data/az_cruk/cdc7", 
                           pattern = "DesirabilityGeneRanking.tsv", recursive = T, full.names = T)
 bagel_files.ctrl_pl <- list.files("~/data/az_cruk/cdc7",
@@ -93,6 +94,41 @@ read_bagel_output <- function(files, ess = "hart"){
 }
 
 
+norm_counts <- function(data, type){
+  samples <- colnames(data)[grepl("^FGC",colnames(data))]
+  samples <- samples[samples %in% val_data$name[val_data$class==type]]
+  csums <- colSums(data[,3:ncol(data)])
+  # Use median of controls for scaling normalized data.
+  mdn.ctrl <- median(csums[grepl("FGC",names(csums))])
+  data.norm <- data %>%
+    mutate(!!sym(samples[1]) := mdn.ctrl * !!sym(samples[1])/csums[names(csums)==samples[1]],
+         !!sym(samples[2]) := mdn.ctrl * !!sym(samples[2])/csums[names(csums)==samples[2]],
+         Yusa_v3_KO_Plasmid_FGC_batch_1 = mdn.ctrl*Yusa_v3_KO_Plasmid_FGC_batch_1/csums[names(csums)=="Yusa_v3_KO_Plasmid_FGC_batch_1"],
+         gene_group = case_when(gene %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
+                                gene %in% ess.genes$bagel_nonessential ~ "non_essential_Hart",
+                                gene %in% ess.genes$bagel_essential ~ "essential_Hart",
+                                gene %in% genes.mod_fitn ~ "moderately_negative",
+                                TRUE ~ "Other"))
+  if(length(samples) == 3){
+    data.norm %<>%
+      mutate(!!sym(samples[3]) := mdn.ctrl * !!sym(samples[3])/csums[names(csums)==samples[3]])
+  }
+  return(data.norm)
+}
+
+
+read_counts <- function(files, type){
+  ret <- list()
+  for(file in files){
+    comp <- gsub("^.*?/Comp-(\\S+?).counts.*$","\\1",file)
+    ret[[comp]] <- read.delim(file) %>%
+      norm_counts(type)
+  }
+  return(ret)
+}
+
+
+# For assessing cell line LFC similarities.
 jaccard_index <- function(genes, data_1, data_2, thresh){
   jacc_num <- length(intersect(genes[data_1 < thresh], genes[data_2 < thresh]))
   jacc_denom <- length(union(genes[data_1 < thresh], genes[data_2 < thresh]))
@@ -109,6 +145,10 @@ data.bagel.ctrl_pl.hart <- read_bagel_output(bagel_files.ctrl_pl)
 data.bagel.treat_pl.hart <- read_bagel_output(bagel_files.treat_pl)
 data.bagel.ctrl_pl.sang <- read_bagel_output(bagel_files.ctrl_pl, ess="sanger")
 data.bagel.treat_pl.sang <- read_bagel_output(bagel_files.treat_pl, ess="sanger")
+
+data.counts.bl <- read_counts(count_files, type = "baseline")
+data.counts.ctrl <- read_counts(count_files, type = "control")
+data.counts.trt <- read_counts(count_files, type = "treatment")
 ```
 
 # QC
@@ -127,13 +167,10 @@ run_gicc <- function(data){
 calc_gicc <- function(data_list){
   ret <- NULL
   for(comp in names(data_list)){
-    tp <- gsub("^(\\S+?)_.*$","\\1",comp)
-    num_reps <- gsub("^.*?vs_plasmid_(._replicates.*)$","\\1",comp)
     td <- data_list[[comp]] %>%
       filter(gene_group != "Other") %>%
       group_by(gene_group) %>%
-      do(data.frame(comparison = comp, time_point = tp, num_reps = num_reps,
-                    GICC = run_gicc(.), stringsAsFactors = F))
+      do(data.frame(cell_line = comp, GICC = run_gicc(.), stringsAsFactors = F))
     ret <- rbind(ret, td)
   }
   return(ret)
@@ -142,7 +179,20 @@ calc_gicc <- function(data_list){
 ```
 
 ```{r}
+gicc.counts <- rbind(calc_gicc(data.counts.bl) %>%
+                       mutate(time_point = "baseline"),
+                     calc_gicc(data.counts.ctrl) %>%
+                       mutate(time_point = "control"),
+                     calc_gicc(data.counts.trt) %>%
+                       mutate(time_point = "treatment"))
 
+gicc.counts %>% 
+  ggplot(aes(cell_line, GICC, group=gene_group, color=gene_group)) +
+  geom_point() +
+  geom_line() +
+  geom_hline(yintercept = 0.6, linetype = "dashed") +
+  facet_grid(~time_point) +
+  ggtitle("Reproducibility of normalized counts: GICC")
 
 ```
 
