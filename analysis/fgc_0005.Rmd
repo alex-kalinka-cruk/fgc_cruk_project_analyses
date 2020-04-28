@@ -33,6 +33,8 @@ rename <- dplyr::rename
 mutate <- dplyr::mutate
 
 load("../data/ess.genes.rda")
+mod_fitness.genes <- readRDS(file="../data/depmap_lfc_modfitn.rds")
+val_data <- readRDS(file="../data/fgc0005_val-data.rds")$samples
 
 # Slow to run from scratch.
 desir_perf.depl <- readRDS(file="../data/desir_fdr_perf_depleted.rds")
@@ -111,6 +113,41 @@ data.bagel.treat_pl.sang <- read_bagel_output(bagel_files.treat_pl, ess="sanger"
 
 # QC
 
+## GICC of normalized counts
+
+```{r}
+run_gicc <- function(data){
+  samps <- colnames(data)[3:(ncol(data)-1)]
+  samps[grepl("^FGC",samps)] <- "control"
+  td <- data.frame(id = samps, t(data[,3:(ncol(data)-1)]), stringsAsFactors = F)
+  gicc <- GICC(td)
+  return(gicc$GICC$GICC.1)
+}
+
+calc_gicc <- function(data_list){
+  ret <- NULL
+  for(comp in names(data_list)){
+    tp <- gsub("^(\\S+?)_.*$","\\1",comp)
+    num_reps <- gsub("^.*?vs_plasmid_(._replicates.*)$","\\1",comp)
+    td <- data_list[[comp]] %>%
+      filter(gene_group != "Other") %>%
+      group_by(gene_group) %>%
+      do(data.frame(comparison = comp, time_point = tp, num_reps = num_reps,
+                    GICC = run_gicc(.), stringsAsFactors = F))
+    ret <- rbind(ret, td)
+  }
+  return(ret)
+}
+
+```
+
+```{r}
+
+
+```
+
+## LFC
+
 ```{r}
 ggplot(data.bagel.ctrl_pl.hart,
        aes(False_Positive_Rate, True_Positive_Rate, color=cell_line)) +
@@ -137,7 +174,19 @@ ggplot(data.bagel.treat_pl.sang,
   ggtitle("ROC Sanger pan-cancer: Treatment vs Plasmid")
 
 
-# Correlation plot for cell line desirability.
+```
+
+## Precision-Recall
+
+```{r}
+
+
+```
+
+# Cell line analysis
+
+```{r}
+# Jaccard index for negative LFC
 ji <- data.desir %>%
   tidyr::pivot_wider(id_cols = gene, names_from = cell_line,
                      values_from = TvC_LFC) %>%
@@ -145,7 +194,7 @@ ji <- data.desir %>%
   mutate(median.lfc = median(c(HCT116,`HT-29`,RKO,SW480), na.rm=T)) %>%
   ungroup() %>%
   arrange(median.lfc) %>%
-  head(n=500)
+  head(n=150)
   
 jd <- c(jaccard_index(ji$gene, ji$`HT-29`, ji$HCT116, -0.25),
         jaccard_index(ji$gene, ji$`HT-29`, ji$SW480, -0.25),
@@ -159,15 +208,12 @@ jacc.mat <- matrix(c(1,jd[1:3],
                          jd[c(3,5,4)],1), 4, 4, byrow = T)
 colnames(jacc.mat) <- rownames(jacc.mat) <- c("HT-29","HCT116","SW480","RKO")
 
-ggcorr(jacc.mat, label = T, label_round = 3, cor_matrix = jacc.mat, limits=c(0.15,0.4),
-       midpoint = 0.25) +
-  ggtitle("Cell line log-fold-change similarity: Jaccard Index for top 500 negative genes")
+ggcorr(jacc.mat, label = T, label_round = 3, cor_matrix = jacc.mat, limits=c(0.25,0.6),
+       midpoint = 0.4) +
+  labs(title = "Cell line log-fold-change (LFC) similarity:",
+       subtitle =  "Jaccard Index for top 150 negative LFC genes")
 
 ```
-
-
-# Approach
-
 
 
 # Performance MLE: Choosing score cutoffs on basis of FPR estimates
