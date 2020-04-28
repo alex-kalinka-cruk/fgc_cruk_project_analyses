@@ -22,6 +22,7 @@ suppressMessages(library(knitr))
 suppressMessages(library(tidyr))
 suppressMessages(library(magrittr))
 suppressMessages(library(ggplot2))
+suppressMessages(library(GGally))
 suppressMessages(library(dplyr))
 suppressMessages(library(perept))
 suppressMessages(library(crispRutils))
@@ -89,6 +90,13 @@ read_bagel_output <- function(files, ess = "hart"){
   return(ret)
 }
 
+
+jaccard_index <- function(genes, data_1, data_2, thresh){
+  jacc_num <- length(intersect(genes[data_1 < thresh], genes[data_2 < thresh]))
+  jacc_denom <- length(union(genes[data_1 < thresh], genes[data_2 < thresh]))
+  return(jacc_num/jacc_denom)
+}
+
 ```
 
 
@@ -127,6 +135,33 @@ ggplot(data.bagel.treat_pl.sang,
   geom_line() +
   geom_abline(linetype="dashed") +
   ggtitle("ROC Sanger pan-cancer: Treatment vs Plasmid")
+
+
+# Correlation plot for cell line desirability.
+ji <- data.desir %>%
+  tidyr::pivot_wider(id_cols = gene, names_from = cell_line,
+                     values_from = TvC_LFC) %>%
+  rowwise() %>%
+  mutate(median.lfc = median(c(HCT116,`HT-29`,RKO,SW480), na.rm=T)) %>%
+  ungroup() %>%
+  arrange(median.lfc) %>%
+  head(n=500)
+  
+jd <- c(jaccard_index(ji$gene, ji$`HT-29`, ji$HCT116, -0.25),
+        jaccard_index(ji$gene, ji$`HT-29`, ji$SW480, -0.25),
+        jaccard_index(ji$gene, ji$`HT-29`, ji$RKO, -0.25),
+        jaccard_index(ji$gene, ji$HCT116, ji$SW480, -0.25),
+        jaccard_index(ji$gene, ji$HCT116, ji$RKO,-0.25),
+        jaccard_index(ji$gene, ji$SW480, ji$RKO, -0.25))
+jacc.mat <- matrix(c(1,jd[1:3],
+                         jd[1],1,jd[4:5],
+                         jd[c(2,4)],1,jd[6],
+                         jd[c(3,5,4)],1), 4, 4, byrow = T)
+colnames(jacc.mat) <- rownames(jacc.mat) <- c("HT-29","HCT116","SW480","RKO")
+
+ggcorr(jacc.mat, label = T, label_round = 3, cor_matrix = jacc.mat, limits=c(0.15,0.4),
+       midpoint = 0.25) +
+  ggtitle("Cell line log-fold-change similarity: Jaccard Index for top 500 negative genes")
 
 ```
 
