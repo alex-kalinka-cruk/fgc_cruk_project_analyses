@@ -26,6 +26,8 @@ suppressMessages(library(ggplot2))
 suppressMessages(library(dplyr))
 suppressMessages(library(gt))
 suppressMessages(library(ggsci))
+suppressMessages(library(patchwork))
+suppressMessages(library(GICC))
 
 proj_data.path <- file.path("..","..","project_data","fgc_0005")
 
@@ -388,6 +390,125 @@ shared_tab.sgl.or
 
 # QC
 
+```{r}
+# QC-related data and functions.
+# Data kept locally.
+mageck_files <- list.files("~/data/az_cruk/cdc7", 
+                           pattern = "Treatment_vs_Control.gene_summary.txt", recursive = T, full.names = T)
+mageck_files.cvp <- list.files("~/data/az_cruk/cdc7", 
+                           pattern = "Control_vs_Plasmid.gene_summary.txt", recursive = T, full.names = T)
+
+count_files <- list.files("~/data/az_cruk/cdc7", pattern="combined_counts.txt", recursive=T, full.names=T)
+desir_files <- list.files("~/data/az_cruk/cdc7", 
+                          pattern = "DesirabilityGeneRanking.tsv", recursive = T, full.names = T)
+bagel_files.ctrl_pl <- list.files("~/data/az_cruk/cdc7",
+                          pattern = "Control_vs_Plasmid.bf", recursive = T, full.names = T)
+bagel_files.treat_pl <- list.files("~/data/az_cruk/cdc7",
+                          pattern = "Treatment_vs_Plasmid.bf", recursive = T, full.names = T)
+
+read_gene_summ <- function(files, type = "mageck"){
+  ret <- NULL
+  for(file in files){
+    cell_line <- gsub("^.*?Comp-(\\S+?)\\/.*$","\\1",file)
+    if(type == "mageck"){
+      td <- read.table(file, header=T, stringsAsFactors = F) %>%
+        select(id, neg.score, neg.p.value, neg.fdr, neg.rank, neg.lfc, pos.score, pos.p.value, pos.fdr, pos.rank, pos.lfc) %>%
+        rename(gene = id)
+    }else{
+      td <- read.delim(file, header=T, stringsAsFactors = F) %>%
+        select(gene, TvCCvP_PositiveDesi, TvCCvP_NegativeDesi, TvC_negpval, TvC_pospval, TvC_LFC)
+    }
+    ret <- rbind(ret, data.frame(cell_line = cell_line,td), stringsAsFactors=F)
+  }
+  return(ret)
+}
+
+
+read_bagel_output <- function(files, ess = "hart"){
+  ret <- NULL
+  if(length(ess)>1){
+    ess_genes <- ess
+  }else if(ess == "hart"){
+    ess_genes <- ess.genes$bagel_essential
+  }else if(ess == "sanger"){
+    ess_genes <- ess.genes$pan_cancer_Sanger
+  }else{
+    stop(paste("unknown essentiality option",ess))
+  }
+  for(file in files){
+    cell_line <- gsub("^.*?Comp-(\\S+?)\\/.*$","\\1",file)
+    td <- read.table(file, header=T, stringsAsFactors = F) %>%
+      filter(GENE %in% c(ess_genes, ess.genes$bagel_nonessential)) %>%
+      mutate(TP = GENE %in% ess_genes,
+             cell_line = cell_line) %>%
+      add_ROC(score_col = "BF")
+    ret <- rbind(ret, td)
+  }
+  return(ret)
+}
+
+
+norm_counts <- function(data, type){
+  samples <- colnames(data)[grepl("^FGC",colnames(data))]
+  samples <- samples[samples %in% val_data$name[val_data$class==type]]
+  csums <- colSums(data[,3:ncol(data)])
+  # Use median of controls for scaling normalized data.
+  mdn.ctrl <- median(csums[grepl("FGC",names(csums))])
+  data.norm <- data %>%
+    mutate(!!sym(samples[1]) := mdn.ctrl * !!sym(samples[1])/csums[names(csums)==samples[1]],
+         !!sym(samples[2]) := mdn.ctrl * !!sym(samples[2])/csums[names(csums)==samples[2]],
+         Yusa_v3_KO_Plasmid_FGC_batch_1 = mdn.ctrl*Yusa_v3_KO_Plasmid_FGC_batch_1/csums[names(csums)=="Yusa_v3_KO_Plasmid_FGC_batch_1"],
+         gene_group = case_when(gene %in% ess.genes$bagel_essential ~ "essential_Hart",
+                                gene %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
+                                gene %in% ess.genes$bagel_nonessential ~ "non_essential_Hart",
+                                gene %in% mod_fitness.genes ~ "moderately_negative",
+                                TRUE ~ "Other"))
+  if(length(samples) == 3){
+    data.norm %<>%
+      mutate(!!sym(samples[3]) := mdn.ctrl * !!sym(samples[3])/csums[names(csums)==samples[3]])
+  }
+  return(data.norm)
+}
+
+
+read_counts <- function(files, type){
+  ret <- list()
+  for(file in files){
+    comp <- gsub("^.*?/Comp-(\\S+?).counts.*$","\\1",file)
+    ret[[comp]] <- read.delim(file) %>%
+      norm_counts(type)
+  }
+  return(ret)
+}
+
+
+# For assessing cell line LFC similarities.
+jaccard_index <- function(genes, data_1, data_2, thresh){
+  jacc_num <- length(intersect(genes[data_1 < thresh], genes[data_2 < thresh]))
+  jacc_denom <- length(union(genes[data_1 < thresh], genes[data_2 < thresh]))
+  return(jacc_num/jacc_denom)
+}
+
+
+# Data.
+data.mageck <- read_gene_summ(mageck_files)
+data.mageck.cvp <- read_gene_summ(mageck_files.cvp)
+data.bagel.ctrl_pl.hart <- read_bagel_output(bagel_files.ctrl_pl)
+data.bagel.treat_pl.hart <- read_bagel_output(bagel_files.treat_pl)
+data.bagel.ctrl_pl.sang <- read_bagel_output(bagel_files.ctrl_pl, ess="sanger")
+data.bagel.treat_pl.sang <- read_bagel_output(bagel_files.treat_pl, ess="sanger")
+data.bagel.ctrl_pl.mf <- read_bagel_output(bagel_files.ctrl_pl, ess=mod_fitness.genes)
+data.bagel.treat_pl.mf <- read_bagel_output(bagel_files.treat_pl, ess=mod_fitness.genes)
+
+data.counts.bl <- read_counts(count_files, type = "baseline")
+data.counts.ctrl <- read_counts(count_files, type = "control")
+data.counts.trt <- read_counts(count_files, type = "treatment")
+
+```
+
+
+## Log-fold change
+
 ```{r, eval=F}
 lfc_hct116 <- norm_logfc(uncorr.counts$HCT116, 
                          c("FGC0005_01_04_04","FGC0005_01_04_05","FGC0005_01_04_06"))
@@ -398,9 +519,6 @@ lfc_rko<- norm_logfc(uncorr.counts$RKO,
 lfc_ht29<- norm_logfc(uncorr.counts$`HT-29`, 
                          c("FGC0005_01_01_03","FGC0005_01_01_04"))
 
-```
-
-```{r}
 plot_lfc(norm_lfc_fgc0005$HCT116, "HCT116 Control vs Plasmid: essential vs nonessential logFC")
 
 plot_lfc(norm_lfc_fgc0005$SW480, "SW480 Control vs Plasmid: essential vs nonessential logFC")
@@ -410,6 +528,136 @@ plot_lfc(norm_lfc_fgc0005$RKO, "RKO Control vs Plasmid: essential vs nonessentia
 plot_lfc(norm_lfc_fgc0005$HT29, "HT-29 Control vs Plasmid: essential vs nonessential logFC")
 
 ```
+
+```{r}
+data.mageck.cvp %>%
+  mutate(gene_group = case_when(gene %in% ess.genes$bagel_essential ~ "essential_Hart",
+                                gene %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
+                                gene %in% ess.genes$bagel_nonessential ~ "non_essential_Hart",
+                                gene %in% mod_fitness.genes ~ "moderately_negative",
+                                TRUE ~ "Other")) %>%
+  filter(gene_group != "Other") %>%
+  ggplot(aes(cell_line, neg.lfc, color = gene_group)) +
+  geom_point(position = position_dodge(width=0.75)) +
+  geom_boxplot(notch=T) +
+  geom_hline(yintercept = 0, linetype="dashed") +
+  ylab("Log2 Fold Change") +
+  ggtitle("Log fold change: cell line and gene set comparison")
+
+```
+
+## Reproducibility of counts
+
+```{r}
+run_gicc <- function(data){
+  samps <- colnames(data)[3:(ncol(data)-1)]
+  samps[grepl("^FGC",samps)] <- "control"
+  td <- data.frame(id = samps, t(data[,3:(ncol(data)-1)]), stringsAsFactors = F)
+  gicc <- GICC(td)
+  return(gicc$GICC$GICC.1)
+}
+
+calc_gicc <- function(data_list){
+  ret <- NULL
+  for(comp in names(data_list)){
+    td <- data_list[[comp]] %>%
+      filter(gene_group != "Other") %>%
+      group_by(gene_group) %>%
+      do(data.frame(cell_line = comp, GICC = run_gicc(.), stringsAsFactors = F))
+    ret <- rbind(ret, td)
+  }
+  return(ret)
+}
+
+```
+
+```{r}
+gicc.counts <- rbind(calc_gicc(data.counts.bl) %>%
+                       mutate(time_point = "baseline"),
+                     calc_gicc(data.counts.ctrl) %>%
+                       mutate(time_point = "control"),
+                     calc_gicc(data.counts.trt) %>%
+                       mutate(time_point = "treatment"))
+
+gicc.counts %>% 
+  ggplot(aes(cell_line, GICC, group=gene_group, color=gene_group)) +
+  geom_point() +
+  geom_line() +
+  geom_hline(yintercept = 0.6, linetype = "dashed") +
+  facet_grid(~time_point) +
+  ggtitle("Reproducibility of normalized counts: GICC")
+
+```
+
+## Precision-Recall
+
+```{r}
+pr.hart <- data.bagel.ctrl_pl.hart %>%
+  group_by(cell_line) %>%
+  do(data.frame(get_PRROC(., "BF", group_col = "cell_line")))
+
+pr.sang <- data.bagel.ctrl_pl.sang %>%
+  group_by(cell_line) %>%
+  do(data.frame(get_PRROC(., "BF", group_col = "cell_line")))
+
+pr.mf <- data.bagel.ctrl_pl.mf %>%
+  group_by(cell_line) %>%
+  do(data.frame(get_PRROC(., "BF", group_col = "cell_line")))
+
+# Plots.
+ggplot(pr.hart, aes(Recall,Precision,color=cell_line, group=cell_line)) +
+  geom_line() +
+  geom_hline(yintercept = 0.5, linetype = "dashed") +
+  ggtitle("Precision-Recall: Hart essentials")
+
+ggplot(pr.sang, aes(Recall,Precision,color=cell_line, group=cell_line)) +
+  geom_line() +
+  geom_hline(yintercept = 0.5, linetype = "dashed") +
+  ggtitle("Precision-Recall: pan-cancer Sanger")
+
+ggplot(pr.mf, aes(Recall,Precision,color=cell_line, group=cell_line)) +
+  geom_line() +
+  geom_hline(yintercept = 0.5, linetype = "dashed") +
+  ggtitle("Precision-Recall: moderately negative fitness defects")
+
+plot.auprrc <- rbind(pr.sang %>%
+                  group_by(cell_line) %>%
+                  summarise(AUPrRc = AUPrRc[1]) %>%
+                  mutate(gene_group = "pan_cancer_Sanger"),
+                pr.hart %>%
+                  group_by(cell_line) %>%
+                  summarise(AUPrRc = AUPrRc[1]) %>%
+                  mutate(gene_group = "essential_Hart"),
+                pr.mf %>%
+                  group_by(cell_line) %>%
+                  summarise(AUPrRc = AUPrRc[1]) %>%
+                  mutate(gene_group = "moderately_negative")) %>%
+  ggplot(aes(cell_line, AUPrRc, group = gene_group, color = gene_group)) +
+  geom_point() +
+  geom_line() +
+  ggtitle("AUC Precision-Recall: cell line and gene set comparison")
+
+plot.fdr_prrc <- rbind(pr.sang %>%
+                  group_by(cell_line) %>%
+                  summarise(Sensitivity_fdr_10pct = Sensitivity_fdr_10pct[1]) %>%
+                  mutate(gene_group = "pan_cancer_Sanger"),
+                pr.hart %>%
+                  group_by(cell_line) %>%
+                  summarise(Sensitivity_fdr_10pct = Sensitivity_fdr_10pct[1]) %>%
+                  mutate(gene_group = "essential_Hart"),
+                pr.mf %>%
+                  group_by(cell_line) %>%
+                  summarise(Sensitivity_fdr_10pct = Sensitivity_fdr_10pct[1]) %>%
+                  mutate(gene_group = "moderately_negative")) %>%
+  ggplot(aes(cell_line, Sensitivity_fdr_10pct, group = gene_group, color = gene_group)) +
+  geom_point() +
+  geom_line() +
+  ggtitle("Sensitivity at 10% FDR: cell line and gene set comparison")
+
+plot.auprrc / plot.fdr_prrc
+
+```
+
 
 # References
 

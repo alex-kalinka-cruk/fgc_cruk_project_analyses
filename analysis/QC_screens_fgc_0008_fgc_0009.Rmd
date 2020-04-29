@@ -76,10 +76,10 @@ read_cleanr_lfc <- function(files, project_id){
                                  num_reps = num_reps, stringsAsFactors = F))
   }
   return(ret %>%
-           mutate(gene_group = case_when(GENE %in% ess.genes$bagel_nonessential ~ "non_essential_Hart",
-                                         GENE %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
-                                         GENE %in% ess.genes$bagel_essential ~ "essential_Hart",
-                                         GENE %in% genes.mod_fitn ~ "moderately_negative",
+           mutate(gene_group = case_when(gene %in% ess.genes$bagel_essential ~ "essential_Hart",
+                                         gene %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
+                                         gene %in% ess.genes$bagel_nonessential ~ "non_essential_Hart",
+                                         gene %in% genes.mod_fitn ~ "moderately_negative",
                                          TRUE ~ "Other")))
 }
 
@@ -120,10 +120,10 @@ norm_counts <- function(data){
     mutate(!!sym(samples[1]) := mdn.ctrl * !!sym(samples[1])/csums[names(csums)==samples[1]],
          !!sym(samples[2]) := mdn.ctrl * !!sym(samples[2])/csums[names(csums)==samples[2]],
          Yusa_v3_KO_Plasmid_FGC_batch_1 = mdn.ctrl*Yusa_v3_KO_Plasmid_FGC_batch_1/csums[names(csums)=="Yusa_v3_KO_Plasmid_FGC_batch_1"],
-         gene_group = case_when(gene %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
+         gene_group = case_when(gene %in% ess.genes$bagel_essential ~ "essential_Hart",
+                                gene %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
                                 gene %in% ess.genes$bagel_nonessential ~ "non_essential_Hart",
-                                gene %in% ess.genes$bagel_essential ~ "essential_Hart",
-                                gene %in% genes.mod_fitn ~ "moderately_negative",
+                                gene %in% mod_fitness.genes ~ "moderately_negative",
                                 TRUE ~ "Other"))
   if(length(samples) == 3){
     data.norm %<>%
