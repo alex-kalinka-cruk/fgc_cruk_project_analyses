@@ -200,11 +200,15 @@ print_cand_table <- function(data, title, subtitle){
 * There are 22 depletion hits that are shared across at least 2 cell lines.
 * The GO biological process 'regulation of cell cycle' is strongly enriched.
 * There are few over-represented genes with the majority a hit in only 1 cell line.
-* HT-29 is an outlier among the 4 colon cancer cell lines - this is corroborated by a recent paper classifying HT-29 as a colon-cell like cell line and the other 3 cell lines as Undifferentiated
+* HT-29 is an outlier among the 4 colon cancer cell lines - this is corroborated by a recent paper classifying HT-29 as belonging to a different group to the other 3 cell lines.
 
 # Approach for identifying shared hits
 
-Four colon cancer cell lines were used in the study and this provides a means to identify shared hits, defined as candidate genes that are shared across two or more cell lines (as opposed to singleton candidates, defined as hits in only one cell line). In the following analysis, we extract and compare:
+Four colon cancer cell lines were used in the study and this provides a means to identify shared hits, defined as candidate genes that are shared across two or more cell lines (as opposed to singleton candidates, defined as hits in only one cell line). When a hit occurs in more than one cell line, it strongly boosts the evidence that it is a true hit.
+
+![The probability that a gene is a true hit is enhanced by occurring in more than 1 cell line screen. P_11 - probability that a hit is a true positive.](../images/Celllines_Alex.png)
+
+In the following analysis, we extract and compare:
 
 * **Shared** candidate genes at a False Discovery Rate (FDR) of 10%.
 * **Singleton** candidate genes at an FDR of 10%.
@@ -263,11 +267,13 @@ ggcorr(jacc.mat, label = T, label_round = 3, cor_matrix = jacc.mat, limits=c(0.2
 
 ```
 
-![Classification of colorectal cell lines: Berg et al. 2017 Figure 6](../images/fig-6-bergetal2017.png)
+![Classification of colorectal cell lines: Berg et al. 2017 Figure 6. Red boxes highlight the four cell lines used in the present study, and a red line separates the two cell line classes defined using transcriptomic data.](../images/fig-6-bergetal2017.png)
 
 # Shared Hits
 
 ## Desirability Threshold
+
+Below is the curve used to define the Desirability threshold that corresponds to an FDR of 10% for shared hits for depleted genes. The Desirability threshold is approximately 0.8.
 
 ```{r}
 pl <- desir_perf.depl %>%
@@ -447,6 +453,8 @@ mageck_files <- list.files("~/data/az_cruk/cdc7",
                            pattern = "Treatment_vs_Control.gene_summary.txt", recursive = T, full.names = T)
 mageck_files.cvp <- list.files("~/data/az_cruk/cdc7", 
                            pattern = "Control_vs_Plasmid.gene_summary.txt", recursive = T, full.names = T)
+mageck_files.tvp <- list.files("~/data/az_cruk/cdc7", 
+                           pattern = "Treatment_vs_Plasmid.gene_summary.txt", recursive = T, full.names = T)
 
 count_files <- list.files("~/data/az_cruk/cdc7", pattern="combined_counts.txt", recursive=T, full.names=T)
 desir_files <- list.files("~/data/az_cruk/cdc7", 
@@ -535,6 +543,7 @@ read_counts <- function(files, type){
 # Data.
 data.mageck <- read_gene_summ(mageck_files)
 data.mageck.cvp <- read_gene_summ(mageck_files.cvp)
+data.mageck.tvp <- read_gene_summ(mageck_files.tvp)
 data.bagel.ctrl_pl.hart <- read_bagel_output(bagel_files.ctrl_pl)
 data.bagel.treat_pl.hart <- read_bagel_output(bagel_files.treat_pl)
 data.bagel.ctrl_pl.sang <- read_bagel_output(bagel_files.ctrl_pl, ess="sanger")
@@ -586,7 +595,25 @@ data.mageck.cvp %>%
   geom_boxplot(notch=T) +
   geom_hline(yintercept = 0, linetype="dashed") +
   ylab("Log2 Fold Change") +
-  ggtitle("Log fold change: cell line and gene set comparison")
+  facet_grid(~cell_line, space = "free_x", scale = "free_x") +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  ggtitle("Control vs Plasmid Log fold change: cell line and gene set comparison")
+
+data.mageck.tvp %>%
+  mutate(gene_group = case_when(gene %in% ess.genes$bagel_essential ~ "essential_Hart",
+                                gene %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
+                                gene %in% ess.genes$bagel_nonessential ~ "non_essential_Hart",
+                                gene %in% mod_fitness.genes ~ "moderately_negative",
+                                TRUE ~ "Other")) %>%
+  filter(gene_group != "Other") %>%
+  ggplot(aes(cell_line, neg.lfc, color = gene_group)) +
+  geom_point(position = position_dodge(width=0.75)) +
+  geom_boxplot(notch=T) +
+  geom_hline(yintercept = 0, linetype="dashed") +
+  ylab("Log2 Fold Change") +
+  facet_grid(~cell_line, space = "free_x", scale = "free_x") +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  ggtitle("Treatment vs Plasmid Log fold change: cell line and gene set comparison")
 
 ```
 
@@ -631,6 +658,7 @@ gicc.counts %>%
   geom_line() +
   geom_hline(yintercept = 0.6, linetype = "dashed") +
   facet_grid(~time_point) +
+  theme(axis.text.x = element_text(angle = -30, hjust = 0)) +
   ggtitle("Reproducibility of normalized counts: GICC")
 
 ```
