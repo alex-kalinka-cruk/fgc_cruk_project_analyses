@@ -42,11 +42,17 @@ val_data <- readRDS(file="../data/fgc0005_val-data.rds")$samples
 desir_perf.depl <- readRDS(file="../data/desir_fdr_perf_depleted.rds")
 mle_desir_0.8.depl <- readRDS(file="../data/mle_depleted_desir_thresh_0.8.rds")
 
+perc_transd.preantibiotic <- data.frame(cell_line = c("SW480","RKO","HT-29","HCT116"),
+                                        percent_transduction.preantibiotic = c(25,22.5,15,30),
+                                        min_split_cell_count = c(175e6,135e6,135e6,110e6))
+
 # Data kept locally.
 mageck_files <- list.files("~/data/az_cruk/cdc7", 
                            pattern = "Treatment_vs_Control.gene_summary.txt", recursive = T, full.names = T)
 mageck_files.cvp <- list.files("~/data/az_cruk/cdc7", 
                            pattern = "Control_vs_Plasmid.gene_summary.txt", recursive = T, full.names = T)
+mageck_files.sgrna.cvp <- list.files("~/data/az_cruk/cdc7", 
+                           pattern = "Control_vs_Plasmid.sgrna_summary.txt", recursive = T, full.names = T)
 
 count_files <- list.files("~/data/az_cruk/cdc7", pattern="combined_counts.txt", recursive=T, full.names=T)
 desir_files <- list.files("~/data/az_cruk/cdc7", 
@@ -55,6 +61,7 @@ bagel_files.ctrl_pl <- list.files("~/data/az_cruk/cdc7",
                           pattern = "Control_vs_Plasmid.bf", recursive = T, full.names = T)
 bagel_files.treat_pl <- list.files("~/data/az_cruk/cdc7",
                           pattern = "Treatment_vs_Plasmid.bf", recursive = T, full.names = T)
+
 
 read_gene_summ <- function(files, type = "mageck"){
   ret <- NULL
@@ -132,6 +139,26 @@ read_counts <- function(files, type){
 }
 
 
+read_mageck_sgrna <- function(files){
+  ret <- NULL
+  for(file in files){
+    cell_line <- gsub("^.*?Comp-(\\S+?)\\/.*$","\\1",file)
+    td <- read.delim(file, header=T, stringsAsFactors = F, sep="\t") %>%
+      mutate(cell_line = cell_line) %>%
+      # Calculate log fold change for each Ctrl-Pl replicate pair.
+      rowwise() %>%
+      mutate(tr_count_1 = as.numeric(unlist(strsplit(treatment_count,"/"))[1]),
+             tr_count_2 = as.numeric(unlist(strsplit(treatment_count,"/"))[2]),
+             tr_lfc_1 = log2(tr_count_1) - log2(control_count),
+             tr_lfc_2 = log2(tr_count_2) - log2(control_count)) %>%
+      ungroup() %>%
+      select(cell_line, sgrna, Gene, control_count, treatment_count, tr_count_1, tr_count_2, tr_lfc_1, tr_lfc_2)
+    ret <- rbind(ret, td)
+  }
+  return(ret)
+}
+
+
 # For assessing cell line LFC similarities.
 jaccard_index <- function(genes, data_1, data_2, thresh){
   jacc_num <- length(intersect(genes[data_1 < thresh], genes[data_2 < thresh]))
@@ -191,7 +218,9 @@ gicc.counts <- rbind(calc_gicc(data.counts.bl) %>%
                      calc_gicc(data.counts.ctrl) %>%
                        mutate(time_point = "control"),
                      calc_gicc(data.counts.trt) %>%
-                       mutate(time_point = "treatment"))
+                       mutate(time_point = "treatment")) %>%
+  mutate(Percent_Transduction_PreAntibiotic = perc_transd.preantibiotic$percent_transduction.preantibiotic[match(cell_line,perc_transd.preantibiotic$cell_line)],
+         Minimum_Split_Cell_Count = perc_transd.preantibiotic$min_split_cell_count[match(cell_line,perc_transd.preantibiotic$cell_line)])
 
 gicc.counts %>% 
   ggplot(aes(cell_line, GICC, group=gene_group, color=gene_group)) +
@@ -200,6 +229,24 @@ gicc.counts %>%
   geom_hline(yintercept = 0.6, linetype = "dashed") +
   facet_grid(~time_point) +
   ggtitle("Reproducibility of normalized counts: GICC")
+
+gicc.counts %>%
+  filter(time_point == "baseline" & gene_group != "non_essential_Hart") %>%
+  ggplot(aes(Percent_Transduction_PreAntibiotic, GICC, color = gene_group, group = gene_group, 
+             shape = cell_line)) +
+  geom_point(size=4) +
+  geom_line() +
+  facet_grid(~time_point) +
+  ggtitle("Baseline: GICC vs Percent Transduction PreAntibiotic")
+
+gicc.counts %>%
+  filter(time_point == "control" & gene_group != "non_essential_Hart") %>%
+  ggplot(aes(Minimum_Split_Cell_Count, GICC, color = gene_group, group = gene_group, 
+             shape = cell_line)) +
+  geom_point(size=4) +
+  geom_line() +
+  facet_grid(~time_point) +
+  ggtitle("Control: GICC vs Minimum Split Cell Count")
 
 ```
 
