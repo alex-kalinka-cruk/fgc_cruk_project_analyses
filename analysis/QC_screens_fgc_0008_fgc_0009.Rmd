@@ -31,7 +31,7 @@ select <- dplyr::select
 filter <- dplyr::filter
 
 load("../data/ess.genes.rda")
-genes.mod_fitn <- readRDS(file="~/data/az_cruk/depmap/depmap_lfc_modfitn.rds")
+mod_fitness.genes <- readRDS(file="~/data/az_cruk/depmap/depmap_lfc_modfitn.rds")
 mouse_dnds.ess <- readRDS(file = "../data/mouse_dnds.essential_genes.rds")
 
 data_base_path <- "~/data/az_cruk"
@@ -76,10 +76,10 @@ read_cleanr_lfc <- function(files, project_id){
                                  num_reps = num_reps, stringsAsFactors = F))
   }
   return(ret %>%
-           mutate(gene_group = case_when(gene %in% ess.genes$bagel_essential ~ "essential_Hart",
-                                         gene %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
-                                         gene %in% ess.genes$bagel_nonessential ~ "non_essential_Hart",
-                                         gene %in% genes.mod_fitn ~ "moderately_negative",
+           mutate(gene_group = case_when(GENE %in% ess.genes$bagel_essential ~ "essential_Hart",
+                                         GENE %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
+                                         GENE %in% ess.genes$bagel_nonessential ~ "non_essential_Hart",
+                                         GENE %in% mod_fitness.genes ~ "moderately_negative",
                                          TRUE ~ "Other")))
 }
 

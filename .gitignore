@@ -1,5 +1,6 @@
 # Reports.
 analysis/*_report.html
+data/*_hit_table.csv
 
 # History files
 .Rhistory

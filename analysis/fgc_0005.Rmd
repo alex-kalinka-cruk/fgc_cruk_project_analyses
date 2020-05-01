@@ -264,7 +264,9 @@ data.mageck.cvp %>%
   geom_point(position = position_dodge(width=0.75)) +
   geom_boxplot(notch=T) +
   geom_hline(yintercept = 0, linetype="dashed") +
+  facet_grid(~cell_line, space = "free_x", scales = "free_x") +
   ylab("Log2 Fold Change") +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
   ggtitle("Log fold change: cell line and gene set comparison")
 
 ```

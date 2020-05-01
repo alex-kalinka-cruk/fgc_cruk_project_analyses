@@ -1,6 +1,8 @@
 ---
 title: 'CDC7 drug-sensitivity CRISPR Knock-Out screen Analysis'
-author: "Alex Kalinka"
+author: 
+- "Alex Kalinka"
+- "FGC, Milner Therapeutics Institute, Cambridge, UK"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
   html_document:
@@ -13,6 +15,7 @@ output:
     toc_float: true
 ---
 
+![](../images/AZ_FGC_Logo_RGB.png)
 
 ```{r,echo=F}
 options(warn=-1)
@@ -200,13 +203,13 @@ print_cand_table <- function(data, title, subtitle){
 * There are 22 depletion hits that are shared across at least 2 cell lines.
 * The GO biological process 'regulation of cell cycle' is strongly enriched.
 * There are few over-represented genes with the majority a hit in only 1 cell line.
-* HT-29 is an outlier among the 4 colon cancer cell lines - this is corroborated by a recent paper classifying HT-29 as belonging to a different group to the other 3 cell lines.
+* HT-29 is an outlier among the 4 colon cancer cell lines - this is corroborated by a recent paper classifying HT-29 in a different group to the other 3 cell lines.
 
 # Approach for identifying shared hits
 
 Four colon cancer cell lines were used in the study and this provides a means to identify shared hits, defined as candidate genes that are shared across two or more cell lines (as opposed to singleton candidates, defined as hits in only one cell line). When a hit occurs in more than one cell line, it strongly boosts the evidence that it is a true hit.
 
-![The probability that a gene is a true hit is enhanced by occurring in more than 1 cell line screen. P_11 - probability that a hit is a true positive.](../images/Celllines_Alex.png)
+![The probability that a gene is a true hit is enhanced by occurring in more than 1 cell line screen. $P_{11}$ - probability that a hit is a true positive.](../images/Celllines_Alex.png)
 
 In the following analysis, we extract and compare:
 
@@ -384,6 +387,22 @@ combined_tab.sgl <- print_cand_table(cand_df.comb,
                                subtitle = "**Depleted** hits at 10% FDR (ranked by median Desirability)")
 
 combined_tab.sgl
+
+```
+
+```{r}
+# Save combined hits with extra column indicating shared/singleton.
+write.csv(combined_desir %>%
+            filter(hit) %>%
+            mutate(hit_type = ifelse(Gene %in% cand_df$Gene,"Shared","Singleton")) %>%
+            arrange(desc(Desirability)) %>%
+            rename(Desirability_median = Desirability,
+                   Desirability_HCT116 = D_HCT116,
+                   Desirability_SW480 = D_SW480,
+                   Desirability_RKO = D_RKO,
+                   `Desirability_HT-29` = `D_HT-29`),
+          file = "../data/fgc_0005_depletion_hit_table.csv", 
+          row.names = F, quote = F)
 
 ```
 
@@ -617,51 +636,6 @@ data.mageck.tvp %>%
 
 ```
 
-## Reproducibility of counts
-
-GICC values above 0.6 indicate data generally considered to be of high reproducibility.
-
-```{r}
-run_gicc <- function(data){
-  samps <- colnames(data)[3:(ncol(data)-1)]
-  samps[grepl("^FGC",samps)] <- "control"
-  td <- data.frame(id = samps, t(data[,3:(ncol(data)-1)]), stringsAsFactors = F)
-  gicc <- GICC(td)
-  return(gicc$GICC$GICC.1)
-}
-
-calc_gicc <- function(data_list){
-  ret <- NULL
-  for(comp in names(data_list)){
-    td <- data_list[[comp]] %>%
-      filter(gene_group != "Other") %>%
-      group_by(gene_group) %>%
-      do(data.frame(cell_line = comp, GICC = run_gicc(.), stringsAsFactors = F))
-    ret <- rbind(ret, td)
-  }
-  return(ret)
-}
-
-```
-
-```{r}
-gicc.counts <- rbind(calc_gicc(data.counts.bl) %>%
-                       mutate(time_point = "baseline"),
-                     calc_gicc(data.counts.ctrl) %>%
-                       mutate(time_point = "control"),
-                     calc_gicc(data.counts.trt) %>%
-                       mutate(time_point = "treatment"))
-
-gicc.counts %>% 
-  ggplot(aes(cell_line, GICC, group=gene_group, color=gene_group)) +
-  geom_point() +
-  geom_line() +
-  geom_hline(yintercept = 0.6, linetype = "dashed") +
-  facet_grid(~time_point) +
-  theme(axis.text.x = element_text(angle = -30, hjust = 0)) +
-  ggtitle("Reproducibility of normalized counts: GICC")
-
-```
 
 ## Precision-Recall
 
