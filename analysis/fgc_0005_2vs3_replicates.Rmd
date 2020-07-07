@@ -1,0 +1,146 @@
+---
+title: 'FGC_0005: HCT116 - 2 vs 3 replicates'
+author: "Alex Kalinka"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    depth: 3
+    highlight: tango
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+---
+
+# Setup
+
+```{r,echo=F}
+options(warn=-1)
+
+suppressMessages(library(knitr))
+suppressMessages(library(tidyr))
+suppressMessages(library(magrittr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(dplyr))
+suppressMessages(library(fgcQC))
+suppressMessages(library(GGally))
+suppressMessages(library(locfdr))
+
+filter <- dplyr::filter
+select <- dplyr::select
+rename <- dplyr::rename
+mutate <- dplyr::mutate
+
+# Data kept locally.
+mageck_files <- list.files("~/data/az_cruk/cdc7", 
+                           pattern = "Treatment_vs_Control.gene_summary.txt", recursive = T, full.names = T)
+
+
+read_gene_summ <- function(files){
+  ret <- NULL
+  for(file in files){
+    cell_line <- gsub("^.*?Comp-(\\S+?)\\/.*$","\\1",file)
+    if(!grepl("HCT116",cell_line))
+      next
+    td <- read.table(file, header=T, stringsAsFactors = F) %>%
+      select(id, neg.score, neg.p.value, neg.fdr, neg.rank, neg.lfc, pos.score, pos.p.value, pos.fdr, pos.rank, pos.lfc) %>%
+      rename(gene = id)
+    ret <- rbind(ret, data.frame(cell_line = cell_line,td), stringsAsFactors=F)
+  }
+  return(ret)
+}
+
+
+jaccard_index <- function(genes, data_1, data_2){
+  jacc_num <- length(intersect(genes[data_1], genes[data_2]))
+  jacc_denom <- length(union(genes[data_1], genes[data_2]))
+  return(jacc_num/jacc_denom)
+}
+
+
+mh <- read_gene_summ(mageck_files)
+
+```
+
+
+# Hit counts
+
+```{r}
+hit_comp <- mh %>%
+  rowwise() %>%
+  mutate(hit_fdr_5pct = (neg.fdr < 0.05 || pos.fdr < 0.05),
+         hit_fdr_10pct = (neg.fdr < 0.1 || pos.fdr < 0.1)) %>%
+  ungroup
+
+hit_comp %>%
+  group_by(cell_line) %>%
+  summarise(Num_hits_fdr_5pct = sum(hit_fdr_5pct),
+            Num_hits_fdr_10pct = sum(hit_fdr_10pct)) %>%
+  ungroup %>%
+  kable()
+
+```
+
+# Hit comparison
+
+```{r}
+ji <- pivot_wider(hit_comp, id_cols = c(gene,cell_line), 
+                  names_from = cell_line, values_from = hit_fdr_10pct)
+jd <- c(jaccard_index(ji$gene, ji$HCT116, ji$HCT116_2replicates_combn1),
+        jaccard_index(ji$gene, ji$HCT116, ji$HCT116_2replicates_combn2),
+        jaccard_index(ji$gene, ji$HCT116, ji$HCT116_2replicates_combn3),
+        jaccard_index(ji$gene, ji$HCT116_2replicates_combn1, ji$HCT116_2replicates_combn2),
+        jaccard_index(ji$gene, ji$HCT116_2replicates_combn1, ji$HCT116_2replicates_combn3),
+        jaccard_index(ji$gene, ji$HCT116_2replicates_combn2, ji$HCT116_2replicates_combn3))
+jacc.mat <- matrix(c(1,jd[1:3],
+                         jd[1],1,jd[4:5],
+                         jd[c(2,4)],1,jd[6],
+                         jd[c(3,5,4)],1), 4, 4, byrow = T)
+colnames(jacc.mat) <- rownames(jacc.mat) <- c("HCT116_3reps","HCT116_2reps-1","HCT116_2reps-2","HCT116_2reps-3")
+
+ggcorr(jacc.mat, label = T, label_round = 3, cor_matrix = jacc.mat, limits=c(0.25,0.6),
+       midpoint = 0.4) +
+  labs(title = "HCT116 Hit similarities:",
+       subtitle =  "Jaccard Index")
+
+```
+
+# Power estimates: `locfdr`
+
+Using Efron's local FDR approach (Efron 2007) and the accompanying R package `locfdr` to estimate the power of 3 vs 2 replicates at an FDR of 10%. 
+
+```{r}
+lf_3reps <- locfdr(mh$neg.lfc[mh$cell_line=="HCT116"], df=15, plot=3)
+lf_2reps.1 <- locfdr(mh$neg.lfc[mh$cell_line=="HCT116_2replicates_combn1"], df=15, plot=3)
+lf_2reps.2 <- locfdr(mh$neg.lfc[mh$cell_line=="HCT116_2replicates_combn2"], df=15, plot=3)
+lf_2reps.3 <- locfdr(mh$neg.lfc[mh$cell_line=="HCT116_2replicates_combn3"], df=15, plot=3)
+
+roc <- rbind(as.data.frame(lf_3reps$cdf1) %>%
+  rename(FDR = p1, Sensitivity = V2) %>%
+  mutate(Type = "3_reps"),
+  as.data.frame(lf_2reps.1$cdf1) %>%
+  rename(FDR = p1, Sensitivity = V2) %>%
+  mutate(Type = "2_reps.1"),
+  as.data.frame(lf_2reps.2$cdf1) %>%
+  rename(FDR = p1, Sensitivity = V2) %>%
+  mutate(Type = "2_reps.2"),
+  as.data.frame(lf_2reps.3$cdf1) %>%
+  rename(FDR = p1, Sensitivity = V2) %>%
+  mutate(Type = "2_reps.3"))
+
+
+roc %>%
+  ggplot(aes(FDR, Sensitivity, color = Type)) +
+  geom_line() +
+  ylim(0,1) +
+  geom_vline(xintercept = 0.1, lintype = "dashed") +
+  geom_abline(linetype = "dashed") +
+  ggtitle("HCT116: replicate power comparison")
+
+```
+
+# References
+
+Efron, B. 2007. Size, power and false discovery rates. Annals of Statistics 35: 1351-1377.
+

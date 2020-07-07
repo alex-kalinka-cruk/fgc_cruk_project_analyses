@@ -2,6 +2,8 @@
 analysis/*_report.html
 data/*_hit_table.csv
 
+*.Rproj
+
 # History files
 .Rhistory
 .Rapp.history
