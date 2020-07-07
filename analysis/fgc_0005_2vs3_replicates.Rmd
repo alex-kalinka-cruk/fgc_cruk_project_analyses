@@ -32,21 +32,34 @@ select <- dplyr::select
 rename <- dplyr::rename
 mutate <- dplyr::mutate
 
+
+# Shared hits.
+hits.shared <- read.csv("../data/fgc_0005_depletion_hit_table.csv", stringsAsFactors = F) %>%
+  filter(hit_type == "Shared")
+
+
 # Data kept locally.
 mageck_files <- list.files("~/data/az_cruk/cdc7", 
                            pattern = "Treatment_vs_Control.gene_summary.txt", recursive = T, full.names = T)
 
+desir_files <- list.files("~/data/az_cruk/cdc7", 
+                          pattern = "DesirabilityGeneRanking.tsv",recursive = T, full.names = T)
 
-read_gene_summ <- function(files){
+read_gene_summ <- function(files, type = "mageck"){
   ret <- NULL
   for(file in files){
     cell_line <- gsub("^.*?Comp-(\\S+?)\\/.*$","\\1",file)
     if(!grepl("HCT116",cell_line))
       next
-    td <- read.table(file, header=T, stringsAsFactors = F) %>%
-      select(id, neg.score, neg.p.value, neg.fdr, neg.rank, neg.lfc, pos.score, pos.p.value, pos.fdr, pos.rank, pos.lfc) %>%
-      rename(gene = id)
-    ret <- rbind(ret, data.frame(cell_line = cell_line,td), stringsAsFactors=F)
+    if(type == "mageck"){
+      td <- read.table(file, header=T, stringsAsFactors = F) %>%
+        select(id, neg.score, neg.p.value, neg.fdr, neg.rank, neg.lfc, pos.score, pos.p.value, pos.fdr, pos.rank, pos.lfc) %>%
+        rename(gene = id)
+    }else{
+      td <- read.delim(file, header=T, stringsAsFactors = T) %>%
+        select(gene, TvCCvP_PositiveDesi, TvCCvP_NegativeDesi, TvC_negpval, TvC_pospval, TvC_LFC)
+    }
+    ret <- rbind(ret, data.frame(cell_line = cell_line, td), stringsAsFactors=F)
   }
   return(ret)
 }
@@ -60,11 +73,14 @@ jaccard_index <- function(genes, data_1, data_2){
 
 
 mh <- read_gene_summ(mageck_files)
+dh <- read_gene_summ(desir_files, type = "desir")
 
 ```
 
 
 # Hit counts
+
+We do not see more candidate hits for the 3 replicate case.
 
 ```{r}
 hit_comp <- mh %>%
@@ -83,6 +99,10 @@ hit_comp %>%
 ```
 
 # Hit comparison
+
+## Singleton similarities
+
+The 3 replicate case shares more hits with the 2 replicate cases on the whole than they do with each other.
 
 ```{r}
 ji <- pivot_wider(hit_comp, id_cols = c(gene,cell_line), 
@@ -106,15 +126,44 @@ ggcorr(jacc.mat, label = T, label_round = 3, cor_matrix = jacc.mat, limits=c(0.2
 
 ```
 
-# Power estimates: `locfdr`
+## Similarity to shared hits
 
-Using Efron's local FDR approach (Efron 2007) and the accompanying R package `locfdr` to estimate the power of 3 vs 2 replicates at an FDR of 10%. 
+The 3 replicate case does not exhibit a higher similarity to shared hits.
 
 ```{r}
-lf_3reps <- locfdr(mh$neg.lfc[mh$cell_line=="HCT116"], df=15, plot=3)
-lf_2reps.1 <- locfdr(mh$neg.lfc[mh$cell_line=="HCT116_2replicates_combn1"], df=15, plot=3)
-lf_2reps.2 <- locfdr(mh$neg.lfc[mh$cell_line=="HCT116_2replicates_combn2"], df=15, plot=3)
-lf_2reps.3 <- locfdr(mh$neg.lfc[mh$cell_line=="HCT116_2replicates_combn3"], df=15, plot=3)
+js <- data.frame(Type = c("3_reps","2_reps.1","2_reps.2","2_reps.3"),
+                 shared_hits.Jaccard_Index = c(jaccard_index(ji$gene, ji$HCT116, ji$gene %in% hits.shared$Gene),
+                                               jaccard_index(ji$gene, ji$HCT116_2replicates_combn1, ji$gene %in% hits.shared$Gene),
+                                               jaccard_index(ji$gene, ji$HCT116_2replicates_combn2, ji$gene %in% hits.shared$Gene),
+                                               jaccard_index(ji$gene, ji$HCT116_2replicates_combn3, ji$gene %in% hits.shared$Gene)))
+
+js %>%
+  ggplot(aes(Type, shared_hits.Jaccard_Index, fill=Type)) +
+  geom_bar(stat="identity") +
+  ggtitle("HCT116: Similarity to shared hits")
+
+```
+
+
+# Power estimates: `locfdr`
+
+Using Efron's local FDR approach (Efron 2007) and the accompanying R package `locfdr` to estimate the statistical power of 3 vs 2 replicates at an FDR of 10%. A summary statistic is used for each gene - below, we use p-values and log fold changes.
+
+## P-values
+
+```{r}
+pv.3_reps <- mh$neg.p.value[mh$cell_line=="HCT116"]
+pv.3_reps[pv.3_reps==1] <- 0.999
+lf_3reps <- locfdr(qnorm(pv.3_reps), plot=0)
+pv.2_reps.1 <- mh$neg.p.value[mh$cell_line=="HCT116_2replicates_combn1"]
+pv.2_reps.1[pv.2_reps.1==1] <- 0.999
+lf_2reps.1 <- locfdr(qnorm(pv.2_reps.1), plot=0)
+pv.2_reps.2 <- mh$neg.p.value[mh$cell_line=="HCT116_2replicates_combn2"]
+pv.2_reps.2[pv.2_reps.2==1] <- 0.999
+lf_2reps.2 <- locfdr(qnorm(pv.2_reps.2), plot=0)
+pv.2_reps.3 <- mh$neg.p.value[mh$cell_line=="HCT116_2replicates_combn3"]
+pv.2_reps.3[pv.2_reps.3==1] <- 0.999
+lf_2reps.3 <- locfdr(qnorm(pv.2_reps.3), plot=0)
 
 roc <- rbind(as.data.frame(lf_3reps$cdf1) %>%
   rename(FDR = p1, Sensitivity = V2) %>%
@@ -136,7 +185,39 @@ roc %>%
   ylim(0,1) +
   geom_vline(xintercept = 0.1, lintype = "dashed") +
   geom_abline(linetype = "dashed") +
-  ggtitle("HCT116: replicate power comparison")
+  ggtitle("HCT116: replicate power comparison - p-values")
+
+```
+
+## Log-fold changes
+
+```{r}
+lf_3reps <- locfdr(scale(mh$neg.lfc[mh$cell_line=="HCT116"]), df = 15, plot=0)
+lf_2reps.1 <- locfdr(scale(mh$neg.lfc[mh$cell_line=="HCT116_2replicates_combn1"]), df = 15, plot=0)
+lf_2reps.2 <- locfdr(scale(mh$neg.lfc[mh$cell_line=="HCT116_2replicates_combn2"]), df = 15, plot=0)
+lf_2reps.3 <- locfdr(scale(mh$neg.lfc[mh$cell_line=="HCT116_2replicates_combn3"]), df = 15, plot=0)
+
+roc <- rbind(as.data.frame(lf_3reps$cdf1) %>%
+  rename(FDR = p1, Sensitivity = V2) %>%
+  mutate(Type = "3_reps"),
+  as.data.frame(lf_2reps.1$cdf1) %>%
+  rename(FDR = p1, Sensitivity = V2) %>%
+  mutate(Type = "2_reps.1"),
+  as.data.frame(lf_2reps.2$cdf1) %>%
+  rename(FDR = p1, Sensitivity = V2) %>%
+  mutate(Type = "2_reps.2"),
+  as.data.frame(lf_2reps.3$cdf1) %>%
+  rename(FDR = p1, Sensitivity = V2) %>%
+  mutate(Type = "2_reps.3"))
+
+
+roc %>%
+  ggplot(aes(FDR, Sensitivity, color = Type)) +
+  geom_line() +
+  ylim(0,1) +
+  geom_vline(xintercept = 0.1, lintype = "dashed") +
+  geom_abline(linetype = "dashed") +
+  ggtitle("HCT116: replicate power comparison - logFC")
 
 ```
 
