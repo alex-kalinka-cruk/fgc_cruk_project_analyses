@@ -1,0 +1,114 @@
+---
+title: 'TechDev_0001: MOI comparisons'
+author: "Alex Kalinka"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    depth: 3
+    highlight: tango
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+---
+
+# Setup
+
+```{r,echo=F}
+options(warn=-1)
+
+suppressMessages(library(knitr))
+suppressMessages(library(tidyr))
+suppressMessages(library(magrittr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(dplyr))
+suppressMessages(library(fgcQC))
+
+filter <- dplyr::filter
+select <- dplyr::select
+rename <- dplyr::rename
+mutate <- dplyr::mutate
+
+base_path <- "~/data/az_cruk/techdev_0001"
+moi_dirs <- dir(base_path, pattern = "^MOI", recursive = F, full.names = T)
+
+analysis_config <- "~/Documents/fgc/analysis_configs/CRUK-Analysis-4-MOI_expt_pipeline_config-TECHDEV_0001.json"
+lib <- "~/git-projects/az-cruk-crispr-pipeline-referencedata/libraries/yusa_v3_human.1/cleanr.tsv"
+bcl2f <- paste(file.path(base_path,"lane_1","Stats","Stats.json"),
+               file.path(base_path,"lane_2","Stats","Stats.json"),
+               file.path(base_path,"lane_3","Stats","Stats.json"),
+               file.path(base_path,"lane_4","Stats","Stats.json"),
+               file.path(base_path,"lane_5","Stats","Stats.json"),
+               file.path(base_path,"lane_6","Stats","Stats.json"), sep = ",")
+
+run_fgcQC <- function(dirs){
+  ret <- NULL
+  for(dir in dirs){
+    comp <- gsub("^.*?(MOI.*)$","\\1",dir)
+    moi <- gsub("^MOI-(.*?)-.*$","\\1",comp)
+    time <- gsub("^MOI-.*?-(.*)$","\\1",comp)
+    moi_1 <- gsub("^(.).*$","\\1",moi)
+    
+    counts <- list.files(dir, pattern = "combined_counts.txt", full.names = T, recursive = T)
+    bagel <- list.files(dir, pattern = "Control_vs_Plasmid.bf", full.names = T, recursive = T)
+    qc <- QC_fgc_crispr_data(analysis_config, 
+                             counts,
+                             bagel,
+                             NULL,
+                             bcl2f,
+                             lib,
+                             comp,
+                             NULL,
+                             NULL)
+    qc <- qc$qc_metrics %>%
+      mutate(comparison = comp, MOI = moi, time_point = time)
+    ret <- rbind(ret, qc)
+  }
+  return(ret)
+}
+
+
+qc <- run_fgcQC(moi_dirs) %>%
+  mutate(time_point = factor(time_point, levels = c("day7","day14")))
+
+```
+
+# QC
+
+## AUPrRc
+
+```{r}
+qc %>%
+  ggplot(aes(AUPrRc.ctrl_plasmid.pan_cancer_Sanger, AUPrRc.ctrl_plasmid.hart_essential, color = MOI)) +
+  geom_point(cex = 3) +
+  facet_grid(~time_point) +
+  ggtitle("AUPrRc: MOI - 1 and 2")
+
+```
+
+## NNMD
+
+```{r}
+qc %>%
+  ggplot(aes(NNMD_robust.ctrl_plasmid.pan_cancer_Sanger, NNMD_robust.ctrl_plasmid.hart_essential, color = MOI)) +
+  geom_point(cex = 3) +
+  facet_grid(~time_point) +
+  ggtitle("NNMD: MOI - 1 and 2")
+
+```
+
+## GC bias
+
+```{r}
+qc %>%
+  ggplot(aes(NumberReads,distcorr_GC_content_counts, color=MOI)) +
+  geom_point(cex = 3) +
+  facet_grid(~time_point) +
+  ggtitle("GC bias: MOI - 1 and 2")
+
+```
+
+
+
+
