@@ -30,21 +30,29 @@ select <- dplyr::select
 rename <- dplyr::rename
 mutate <- dplyr::mutate
 
-base_path <- "~/data/az_cruk/techdev_0001"
-moi_dirs <- dir(base_path, pattern = "^MOI", recursive = F, full.names = T)
+home_path <- "/home/ubuntu"
 
-analysis_config <- "~/Documents/fgc/analysis_configs/CRUK-Analysis-4-MOI_expt_pipeline_config-TECHDEV_0001.json"
-lib <- "~/git-projects/az-cruk-crispr-pipeline-referencedata/libraries/yusa_v3_human.1/cleanr.tsv"
-bcl2f <- paste(file.path(base_path,"lane_1","Stats","Stats.json"),
-               file.path(base_path,"lane_2","Stats","Stats.json"),
-               file.path(base_path,"lane_3","Stats","Stats.json"),
-               file.path(base_path,"lane_4","Stats","Stats.json"),
-               file.path(base_path,"lane_5","Stats","Stats.json"),
-               file.path(base_path,"lane_6","Stats","Stats.json"), sep = ",")
+qc_fgc <- readRDS(file=file.path(home_path,"qc_all.rds")) %>%
+  mutate(comparison = NA, MOI = "0.3", time_point = NA)
+
+base_path <- "data/az_cruk/techdev_0001"
+moi_dirs <- dir(file.path(home_path, base_path), pattern = "^MOI", recursive = F, full.names = T)
+
+analysis_config <- file.path(home_path,
+                             "Documents/fgc/analysis_configs/CRUK-Analysis-4-MOI_expt_pipeline_config-TECHDEV_0001.json")
+lib <- file.path(home_path,"git-projects/az-cruk-crispr-pipeline-referencedata/libraries/yusa_v3_human.1/cleanr.tsv")
+bcl2f <- paste(file.path(home_path,base_path,"lane_1","Stats","Stats.json"),
+               file.path(home_path,base_path,"lane_2","Stats","Stats.json"),
+               file.path(home_path,base_path,"lane_3","Stats","Stats.json"),
+               file.path(home_path,base_path,"lane_4","Stats","Stats.json"),
+               file.path(home_path,base_path,"lane_5","Stats","Stats.json"),
+               file.path(home_path,base_path,"lane_6","Stats","Stats.json"), sep = ",")
 
 run_fgcQC <- function(dirs){
   ret <- NULL
   for(dir in dirs){
+    if(!grepl("MOI",dir)) next
+    
     comp <- gsub("^.*?(MOI.*)$","\\1",dir)
     moi <- gsub("^MOI-(.*?)-.*$","\\1",comp)
     time <- gsub("^MOI-.*?-(.*)$","\\1",comp)
@@ -69,21 +77,13 @@ run_fgcQC <- function(dirs){
 }
 
 
-qc <- run_fgcQC(moi_dirs) %>%
-  mutate(time_point = factor(time_point, levels = c("day7","day14")))
-
 ```
 
 # QC
 
-## AUPrRc
-
 ```{r}
-qc %>%
-  ggplot(aes(AUPrRc.ctrl_plasmid.pan_cancer_Sanger, AUPrRc.ctrl_plasmid.hart_essential, color = MOI)) +
-  geom_point(cex = 3) +
-  facet_grid(~time_point) +
-  ggtitle("AUPrRc: MOI - 1 and 2")
+qc <- run_fgcQC(moi_dirs) %>%
+  mutate(time_point = factor(time_point, levels = c("baseline","day7","day14")))
 
 ```
 
@@ -94,21 +94,100 @@ qc %>%
   ggplot(aes(NNMD_robust.ctrl_plasmid.pan_cancer_Sanger, NNMD_robust.ctrl_plasmid.hart_essential, color = MOI)) +
   geom_point(cex = 3) +
   facet_grid(~time_point) +
-  ggtitle("NNMD: MOI - 1 and 2")
+  ggtitle("NNMD")
+
+qc %>%
+  ggplot(aes(NNMD_robust.ctrl_plasmid.moderately_negative, NNMD_robust.ctrl_plasmid.weakly_negative, color = MOI)) +
+  geom_point(cex = 3) +
+  facet_grid(~time_point) +
+  ggtitle("NNMD")
 
 ```
+
+## AUPrRc
+
+```{r}
+qc %>%
+  ggplot(aes(AUPrRc.ctrl_plasmid.pan_cancer_Sanger, AUPrRc.ctrl_plasmid.hart_essential, color = MOI)) +
+  geom_point(cex = 3) +
+  facet_grid(~time_point) +
+  ggtitle("AUPrRc")
+
+qc %>%
+  ggplot(aes(AUPrRc.ctrl_plasmid.moderately_negative, AUPrRc.ctrl_plasmid.weakly_negative, color = MOI)) +
+  geom_point(cex = 3) +
+  facet_grid(~time_point) +
+  ggtitle("AUPrRc")
+
+```
+
+## AUROC
+
+```{r}
+qc %>%
+  ggplot(aes(AUROC.ctrl_plasmid.pan_cancer_Sanger, AUROC.ctrl_plasmid.hart_essential, color = MOI)) +
+  geom_point(cex = 3) +
+  facet_grid(~time_point) +
+  ggtitle("AUROC")
+
+qc %>%
+  ggplot(aes(AUROC.ctrl_plasmid.moderately_negative, AUROC.ctrl_plasmid.weakly_negative, color = MOI)) +
+  geom_point(cex = 3) +
+  facet_grid(~time_point) +
+  ggtitle("AUPrRc")
+
+```
+
+
+## GICC
+
+```{r}
+qc %>%
+  ggplot(aes(GICC.ctrl_plasmid.pan_cancer_Sanger, GICC.ctrl_plasmid.hart_essential, color = MOI)) +
+  geom_point(cex = 3) +
+  facet_grid(~time_point) +
+  ggtitle("GICC")
+
+qc %>%
+  ggplot(aes(GICC.ctrl_plasmid.moderately_negative, GICC.ctrl_plasmid.weakly_negative, color = MOI)) +
+  geom_point(cex = 3) +
+  facet_grid(~time_point) +
+  ggtitle("GICC")
+
+```
+
 
 ## GC bias
 
 ```{r}
 qc %>%
-  ggplot(aes(NumberReads,distcorr_GC_content_counts, color=MOI)) +
+  ggplot(aes(NumberReads,norm_counts_GCC_ratio, color=MOI)) +
   geom_point(cex = 3) +
   facet_grid(~time_point) +
-  ggtitle("GC bias: MOI - 1 and 2")
+  ggtitle("GC bias")
 
 ```
 
+## Comparison of 0.3 MOI with QC screens
+
+```{r}
+qc_both <- rbind(qc %>% mutate(project = "TechDev_0001"), 
+                 qc_fgc %>% filter(project %in% c("FGC0008","FGC0009"))) %>%
+  filter(MOI == "0.3" & SampleClass != "plasmid") %>%
+  mutate(SampleClass = ifelse(grepl("baseline",comparison),"baseline",SampleClass))
 
 
+qc_both %>%
+  ggplot(aes(AUPrRc.ctrl_plasmid.pan_cancer_Sanger, AUPrRc.ctrl_plasmid.hart_essential, 
+             color=project, shape = SampleClass)) +
+  geom_point(cex=3) +
+  ggtitle("AUPrRc: MOI = 0.3")
+
+qc_both %>%
+  ggplot(aes(NNMD_robust.ctrl_plasmid.pan_cancer_Sanger, NNMD_robust.ctrl_plasmid.hart_essential, 
+             color=project, shape = SampleClass)) +
+  geom_point(cex=3) +
+  ggtitle("NNMD: MOI = 0.3")
+
+```
 
