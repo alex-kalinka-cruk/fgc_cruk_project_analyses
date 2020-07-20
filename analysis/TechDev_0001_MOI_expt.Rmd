@@ -32,7 +32,7 @@ mutate <- dplyr::mutate
 
 home_path <- "/home/ubuntu"
 
-qc_fgc <- readRDS(file=file.path(home_path,"qc_all.rds")) %>%
+qc_fgc <- readRDS(file="../data/qc_all.rds") %>%
   mutate(comparison = NA, MOI = "0.3", time_point = NA)
 
 base_path <- "data/az_cruk/techdev_0001"
@@ -76,12 +76,16 @@ run_fgcQC <- function(dirs){
   return(ret)
 }
 
+```
+
+```{r}
+qc <- readRDS(file="../data/qc_techdev_0001.rds")
 
 ```
 
 # QC
 
-```{r}
+```{r,eval=F}
 qc <- run_fgcQC(moi_dirs) %>%
   mutate(time_point = factor(time_point, levels = c("baseline","day7","day14")))
 
