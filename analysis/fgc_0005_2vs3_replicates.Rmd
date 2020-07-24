@@ -26,12 +26,20 @@ suppressMessages(library(dplyr))
 suppressMessages(library(fgcQC))
 suppressMessages(library(GGally))
 suppressMessages(library(locfdr))
+suppressMessages(library(perept))
 
 filter <- dplyr::filter
 select <- dplyr::select
 rename <- dplyr::rename
 mutate <- dplyr::mutate
 
+
+
+mle_desir_0.8.3reps <- readRDS(file="../data/mle_depleted_desir_thresh_0.8.rds")
+fdr <- readRDS(file = "../data/fdr_2vs3reps.rds")
+mle_desir_0.8.2reps_1 <- readRDS(file="../data/mle_depleted_desir_thresh_0.8.2reps-1.rds")
+mle_desir_0.8.2reps_2 <- readRDS(file="../data/mle_depleted_desir_thresh_0.8.2reps-2.rds")
+mle_desir_0.8.2reps_3 <- readRDS(file="../data/mle_depleted_desir_thresh_0.8.2reps-3.rds")
 
 # Shared hits.
 hits.shared <- read.csv("../data/fgc_0005_depletion_hit_table.csv", stringsAsFactors = F) %>%
@@ -45,12 +53,14 @@ mageck_files <- list.files("~/data/az_cruk/cdc7",
 desir_files <- list.files("~/data/az_cruk/cdc7", 
                           pattern = "DesirabilityGeneRanking.tsv",recursive = T, full.names = T)
 
-read_gene_summ <- function(files, type = "mageck"){
+read_gene_summ <- function(files, type = "mageck", filter_hct = T){
   ret <- NULL
   for(file in files){
     cell_line <- gsub("^.*?Comp-(\\S+?)\\/.*$","\\1",file)
-    if(!grepl("HCT116",cell_line))
-      next
+    if(filter_hct){
+      if(!grepl("HCT116",cell_line))
+        next
+    }
     if(type == "mageck"){
       td <- read.table(file, header=T, stringsAsFactors = F) %>%
         select(id, neg.score, neg.p.value, neg.fdr, neg.rank, neg.lfc, pos.score, pos.p.value, pos.fdr, pos.rank, pos.lfc) %>%
@@ -74,6 +84,7 @@ jaccard_index <- function(genes, data_1, data_2){
 
 mh <- read_gene_summ(mageck_files)
 dh <- read_gene_summ(desir_files, type = "desir")
+dh.all <- read_gene_summ(desir_files, type = "desir", filter_hct = F)
 
 ```
 
@@ -126,23 +137,189 @@ ggcorr(jacc.mat, label = T, label_round = 3, cor_matrix = jacc.mat, limits=c(0.2
 
 ```
 
-## Similarity to shared hits
 
-The 3 replicate case does not exhibit a higher similarity to shared hits.
+## Log FC variance
+
+There is lower variance in the logFC distribution when we use 3 replicates vs 2:
 
 ```{r}
-js <- data.frame(Type = c("3_reps","2_reps.1","2_reps.2","2_reps.3"),
-                 shared_hits.Jaccard_Index = c(jaccard_index(ji$gene, ji$HCT116, ji$gene %in% hits.shared$Gene),
-                                               jaccard_index(ji$gene, ji$HCT116_2replicates_combn1, ji$gene %in% hits.shared$Gene),
-                                               jaccard_index(ji$gene, ji$HCT116_2replicates_combn2, ji$gene %in% hits.shared$Gene),
-                                               jaccard_index(ji$gene, ji$HCT116_2replicates_combn3, ji$gene %in% hits.shared$Gene)))
-
-js %>%
-  ggplot(aes(Type, shared_hits.Jaccard_Index, fill=Type)) +
-  geom_bar(stat="identity") +
-  ggtitle("HCT116: Similarity to shared hits")
+mh %>%
+  group_by(cell_line) %>%
+  summarise(lfc.sd=sd(neg.lfc),lfc.mad=mad(neg.lfc))
 
 ```
+
+## Shared hit comparison: MLE of Desirability Thresholds
+
+```{r}
+# Put data into format needed by 'MLE.perept'.
+prep_4_mle <- function(data, desir_thresh, dcol_name = "TvCCvP_NegativeDesi"){
+  dcol <- sym(dcol_name)
+  data %<>%
+      mutate(hit = !!dcol >= desir_thresh) %>%
+      tidyr::pivot_wider(id_cols = c(cell_line, gene), names_from = cell_line, values_from = hit) %>%
+      dplyr::rowwise() %>%
+      mutate(total = sum(c(HCT116, `HT-29`, RKO, SW480))) %>%
+      dplyr::ungroup() %>%
+      filter(!is.na(total) & gene != "Control")
+  return(data)
+}
+
+# Find desirability threshold that corresponds to FDR of X%.
+fix_FDR.desir <- function(data, start_desir = 0.9, stop_desir = NULL, fdr_thresh = 0.1, type = "negative", step_size = 0.1){
+  if(type == "negative"){
+    data %<>%
+      select(cell_line, gene, TvCCvP_NegativeDesi)
+    dcol <- "TvCCvP_NegativeDesi"
+  }else{
+    data %<>%
+      select(cell_line, gene, TvCCvP_PositiveDesi)
+    dcol <- "TvCCvP_PositiveDesi"
+  }
+  desir_thresh <- start_desir
+  finish <- FALSE
+  track_perf <- NULL
+  while(!finish){
+    cat("Desirability Threshold:",desir_thresh,"\n")
+    td <- prep_4_mle(data, desir_thresh, dcol_name = dcol)
+    mle <- MLE.perept(as.data.frame(td))
+    # Estimate of global FDR.
+    num_TP <- mle$prevalence$theta_1*nrow(td)
+    num_TN <- nrow(td)-num_TP
+    num_FP <- mle$performance$p10*num_TN
+    FDR <- num_FP/(num_FP+num_TP)
+    # Estimate of FDR after excluding singletons.
+    if(length(which(td$total>=2))==0){
+      # No shared hits.
+      FDR.comm <- 0
+      prob_pos_2 <- 0
+    }else{
+      prob_two_false <- 1-mle$delta$delta_pos[which(td$total==2)[1]]
+      prob_three_false <- 1-mle$delta$delta_pos[which(td$total==3)[1]]
+      num_two_false <- round(length(which(td$total==2))*prob_two_false)
+      num_three_false <- round(length(which(td$total==3))*prob_three_false)
+      FDR.comm <- (num_two_false + num_three_false)/(length(which(td$total>=2)))
+      prob_pos_2 <- mle$delta$delta_pos[which(td$total==2)[1]]
+    }
+    track_perf <- rbind(track_perf, data.frame(Desir_threshold = desir_thresh,
+                                               FPR = mle$performance$p10,
+                                               FDR.global = FDR,
+                                               FDR.common = FDR.comm,
+                                               Sensitivity = mle$performance$p11,
+                                               Prevalence = round(mle$prevalence$theta_1*nrow(td)),
+                                               Prob_pos.two_shared_hits = prob_pos_2,
+                                               Number_singletons = length(which(td$total==1)),
+                                               Number_common_hits = length(which(td$total>=2))))
+    if(!is.null(stop_desir)){
+      if(desir_thresh <= stop_desir){
+        finish <- TRUE
+        ret <- td %>%
+        mutate(probability_hit = mle$delta$delta_pos)
+      }
+    }
+    if(FDR.comm >= fdr_thresh){
+      finish <- TRUE
+      ret <- td %>%
+        mutate(probability_hit = mle$delta$delta_pos)
+    }else{
+      desir_thresh <- desir_thresh - step_size
+    }
+  }
+  return(list(data = ret, perf = track_perf))
+}
+
+```
+
+
+```{r, eval=F}
+fdr.desir.3reps <- fix_FDR.desir(dh.all %>% 
+                             filter(cell_line %in% c("HCT116","HT-29","RKO","SW480")))
+fdr.desir.2reps_1 <- fix_FDR.desir(dh.all %>% 
+                             filter(cell_line %in% c("HCT116_2replicates_combn1","HT-29","RKO","SW480")) %>%
+                               mutate(cell_line = ifelse(cell_line == "HCT116_2replicates_combn1","HCT116",cell_line)))
+fdr.desir.2reps_2 <- fix_FDR.desir(dh.all %>% 
+                             filter(cell_line %in% c("HCT116_2replicates_combn2","HT-29","RKO","SW480")) %>%
+                               mutate(cell_line = ifelse(cell_line == "HCT116_2replicates_combn2","HCT116",cell_line)))
+fdr.desir.2reps_3 <- fix_FDR.desir(dh.all %>% 
+                             filter(cell_line %in% c("HCT116_2replicates_combn3","HT-29","RKO","SW480")) %>%
+                               mutate(cell_line = ifelse(cell_line == "HCT116_2replicates_combn3","HCT116",cell_line)))
+
+fdr <- rbind(fdr.desir.3reps$perf %>% mutate(type = "HCT116_3reps"),
+             fdr.desir.2reps_1$perf %>% mutate(type = "HCT116_2reps-1"),
+             fdr.desir.2reps_2$perf %>% mutate(type = "HCT116_2reps-2"),
+             fdr.desir.2reps_3$perf %>% mutate(type = "HCT116_2reps-3"))
+
+mle_desir_0.8.3reps <- MLE.perept(as.data.frame(prep_4_mle(dh.all %>%
+                                                             filter(cell_line %in% c("HCT116","HT-29","RKO","SW480")),
+                                                           0.8)))
+mle_desir_0.8.2reps_1 <- MLE.perept(as.data.frame(prep_4_mle(dh.all %>%
+                                                             filter(cell_line %in% c("HCT116_2replicates_combn1","HT-29","RKO","SW480")) %>%
+                               mutate(cell_line = ifelse(cell_line == "HCT116_2replicates_combn1","HCT116",cell_line)),
+                                                           0.8)))
+mle_desir_0.8.2reps_2 <- MLE.perept(as.data.frame(prep_4_mle(dh.all %>%
+                                                             filter(cell_line %in% c("HCT116_2replicates_combn2","HT-29","RKO","SW480")) %>%
+                               mutate(cell_line = ifelse(cell_line == "HCT116_2replicates_combn2","HCT116",cell_line)),
+                                                           0.8)))
+mle_desir_0.8.2reps_3 <- MLE.perept(as.data.frame(prep_4_mle(dh.all %>%
+                                                             filter(cell_line %in% c("HCT116_2replicates_combn3","HT-29","RKO","SW480")) %>%
+                               mutate(cell_line = ifelse(cell_line == "HCT116_2replicates_combn3","HCT116",cell_line)),
+                                                           0.8)))
+
+```
+
+* FDR rises faster for 2 reps vs 3 reps.
+* There are more shared hits at Desirability Threshold of 0.8 for 3 reps vs 2 reps.
+
+```{r}
+fdr %>%
+  ggplot(aes(Desir_threshold, FDR.common, color = type)) +
+  geom_point() +
+  geom_line() +
+  geom_hline(yintercept = 0.1, linetype="dashed") +
+  ggtitle("Desirability Threshold at FDR 10%: 2 vs 3 replicates")
+
+```
+
+
+```{r}
+# Comparison at Desirability Threshold of 0.8
+cand.3reps <-  prep_4_mle(dh.all %>%
+                            filter(cell_line %in% c("HCT116","HT-29","RKO","SW480")), 0.8) %>%
+  mutate(probability_hit = mle_desir_0.8.3reps$delta$delta_pos,
+         gene_hit = probability_hit > 0.5)
+
+cand.2reps_1 <-  prep_4_mle(dh.all %>%
+                            filter(cell_line %in% c("HCT116_2replicates_combn1","HT-29","RKO","SW480")) %>%
+                            mutate(cell_line = ifelse(cell_line == "HCT116_2replicates_combn1","HCT116",cell_line)), 0.8) %>%
+  mutate(probability_hit = mle_desir_0.8.2reps_1$delta$delta_pos,
+         gene_hit = probability_hit > 0.5)
+
+cand.2reps_2 <-  prep_4_mle(dh.all %>%
+                            filter(cell_line %in% c("HCT116_2replicates_combn2","HT-29","RKO","SW480")) %>%
+                            mutate(cell_line = ifelse(cell_line == "HCT116_2replicates_combn2","HCT116",cell_line)), 0.8) %>%
+  mutate(probability_hit = mle_desir_0.8.2reps_2$delta$delta_pos,
+         gene_hit = probability_hit > 0.5)
+
+cand.2reps_3 <-  prep_4_mle(dh.all %>%
+                            filter(cell_line %in% c("HCT116_2replicates_combn3","HT-29","RKO","SW480")) %>%
+                            mutate(cell_line = ifelse(cell_line == "HCT116_2replicates_combn3","HCT116",cell_line)), 0.8) %>%
+  mutate(probability_hit = mle_desir_0.8.2reps_3$delta$delta_pos,
+         gene_hit = probability_hit > 0.5)
+
+
+# Shared hit comparison.
+data.frame(type = c("HCT116_3reps","HCT116_2reps-1","HCT116_2reps-2","HCT116_2reps-3"),
+                   Number_shared_hits = c(sum(cand.3reps$gene_hit),
+                                          sum(cand.2reps_1$gene_hit),
+                                          sum(cand.2reps_2$gene_hit),
+                                          sum(cand.2reps_3$gene_hit))) %>%
+  ggplot(aes(type, Number_shared_hits, fill=type)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Number of shared hits at Desirability Threshold of 0.8")
+
+
+```
+
 
 
 # Power estimates: `locfdr`
