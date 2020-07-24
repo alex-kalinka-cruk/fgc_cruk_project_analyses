@@ -402,7 +402,7 @@ roc %>%
 
 # Conclusions
 
-* 3 reps not likely to give more hits when we have low power.
+* 3 reps not likely to give more hits when we have low prevalence and small effect sizes.
 * Lower variance of logFC with 3 reps.
 * Hits at 3 reps are likely to be better candidates.
 * Shared hits across multiple cell lines likely to be higher for 3 reps.
