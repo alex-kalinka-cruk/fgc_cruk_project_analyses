@@ -145,11 +145,15 @@ There is lower variance in the logFC distribution when we use 3 replicates vs 2:
 ```{r}
 mh %>%
   group_by(cell_line) %>%
-  summarise(lfc.sd=sd(neg.lfc),lfc.mad=mad(neg.lfc))
+  summarise(lfc.sd=sd(neg.lfc),lfc.mad=mad(neg.lfc)) %>%
+  kable()
 
 ```
 
 ## Shared hit comparison: MLE of Desirability Thresholds
+
+* FDR rises faster for 2 reps vs 3 reps.
+* More shared hits at Desirability Threshold of 0.8 for 3 reps vs 2 reps.
 
 ```{r}
 # Put data into format needed by 'MLE.perept'.
@@ -267,8 +271,6 @@ mle_desir_0.8.2reps_3 <- MLE.perept(as.data.frame(prep_4_mle(dh.all %>%
 
 ```
 
-* FDR rises faster for 2 reps vs 3 reps.
-* There are more shared hits at Desirability Threshold of 0.8 for 3 reps vs 2 reps.
 
 ```{r}
 fdr %>%
@@ -397,6 +399,13 @@ roc %>%
   ggtitle("HCT116: replicate power comparison - logFC")
 
 ```
+
+# Conclusions
+
+* 3 reps not likely to give more hits when we have low power.
+* Lower variance of logFC with 3 reps.
+* Hits at 3 reps are likely to be better candidates.
+* Shared hits across multiple cell lines likely to be higher for 3 reps.
 
 # References
 
