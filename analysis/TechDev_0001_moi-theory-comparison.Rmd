@@ -1,0 +1,75 @@
+---
+title: 'TechDev_0001: MOI theoretical predictions'
+author: "Alex Kalinka"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    depth: 3
+    highlight: tango
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+---
+
+# Setup
+
+```{r,echo=F}
+options(warn=-1)
+
+suppressMessages(library(knitr))
+suppressMessages(library(tidyr))
+suppressMessages(library(magrittr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(dplyr))
+suppressMessages(library(patchwork))
+
+
+filter <- dplyr::filter
+select <- dplyr::select
+rename <- dplyr::rename
+mutate <- dplyr::mutate
+
+qc <- readRDS(file = "../data/qc_techdev_0001.rds") %>%
+  mutate(MOI = as.numeric(gsub("[T/F]","",MOI)))
+
+```
+
+# MOI empirical
+
+```{r}
+p1 <- qc %>%
+  ggplot(aes(MOI, NNM))
+
+```
+
+
+# MOI theoretical 
+
+```{r}
+prob_pairing_non_neutral_guide <- function(moi, pe){
+  # max number of viruses per cell (at MOI of 5, ppois(20,5,lower.tail = F) < 1e-7)
+  max_n <- 20
+  n <- 2:max_n
+  ret <- NULL
+  for(i in n){
+    pb_nonzero <- 1 - dbinom(0, i, pe)
+    ret <- append(ret, dpois(i, moi) * pb_nonzero)
+  }
+  return(sum(ret))
+}
+
+moi <- c(0.3, 0.75, 1, 2.12, 2.5, 5)
+ppair <- sapply(moi, prob_pairing_non_neutral_guide, 0.6)
+
+data.frame(MOI = moi, prob_pair_ess = ppair) %>%
+  ggplot(aes(MOI, prob_pair_ess)) +
+  geom_point() +
+  geom_smooth(span=2)
+
+```
+
+
+
+
