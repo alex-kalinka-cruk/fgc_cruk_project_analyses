@@ -23,7 +23,9 @@ suppressMessages(library(tidyr))
 suppressMessages(library(magrittr))
 suppressMessages(library(ggplot2))
 suppressMessages(library(dplyr))
+suppressMessages(library(splines2))
 suppressMessages(library(patchwork))
+suppressMessages(library(fgcQC))
 
 
 filter <- dplyr::filter
@@ -32,7 +34,31 @@ rename <- dplyr::rename
 mutate <- dplyr::mutate
 
 qc <- readRDS(file = "../data/qc_techdev_0001.rds") %>%
+  filter(!grepl("T",MOI)) %>%
   mutate(MOI = as.numeric(gsub("[T/F]","",MOI)))
+
+
+cleanr.files <- list.files("~/data/az_cruk/techdev_0001/", pattern = "Control_vs_Plasmid_correctedFCs.tsv",
+                           full.names = T, recursive = T)
+
+read_lfc <- function(files){
+  ret <- NULL
+  for(file in files){
+    if(!grepl("MOI",file)) next
+    
+    comp <- gsub("^.*?(MOI.*)\\/cleanr.*$$","\\1",file)
+    moi <- gsub("^MOI-(.*?)-.*$","\\1",comp)
+    time <- gsub("^MOI-.*?-(.*)$","\\1",comp)
+    
+    lfc <- read.delim(file, header=T, stringsAsFactors = F, sep="\t") %>%
+      mutate(comparison = comp, MOI = moi, time_point = time)
+    ret <- rbind(ret, lfc)
+  }
+  return(ret)
+}
+
+lfc <- read_lfc(cleanr.files)
+
 
 ```
 
@@ -40,7 +66,14 @@ qc <- readRDS(file = "../data/qc_techdev_0001.rds") %>%
 
 ```{r}
 p1 <- qc %>%
-  ggplot(aes(MOI, NNM))
+  filter(time_point == "day14") %>%
+  ggplot(aes(x=MOI, y=NNMD_robust.ctrl_plasmid.pan_cancer_Sanger)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype="dashed") +
+  geom_smooth(method = "nls",
+              formula = y ~ A - (A/(1+exp(-x*B))^(1/v)),
+              method.args = list(start = c(A = -6.5, B = 2, v = 1.2)),
+              se=F)
 
 ```
 
@@ -61,15 +94,34 @@ prob_pairing_non_neutral_guide <- function(moi, pe){
 }
 
 moi <- c(0.3, 0.75, 1, 2.12, 2.5, 5)
-ppair <- sapply(moi, prob_pairing_non_neutral_guide, 0.6)
+ppair <- sapply(moi, prob_pairing_non_neutral_guide, 0.3)
 
 data.frame(MOI = moi, prob_pair_ess = ppair) %>%
   ggplot(aes(MOI, prob_pair_ess)) +
   geom_point() +
-  geom_smooth(span=2)
+  geom_smooth(method = "lm",
+              formula = y ~ splines2::bSpline(x, df = 3),
+              se=F)
 
 ```
 
+# logFC
+
+```{r}
+lfc.pc <- lfc %>%
+  filter(GENE %in% c(crispr_gene_sets$essential$pan_cancer_Sanger, 
+                     crispr_gene_sets$essential$hart_nonessential)) %>%
+  mutate(gene_group = ifelse(GENE %in% crispr_gene_sets$essential$pan_cancer_Sanger, "pan_cancer_Sanger","hart_nonessential"))
+
+lfc.pc %>%
+  filter(time_point == "day14") %>%
+  ggplot(aes(MOI, correctedFC, color = gene_group)) +
+  geom_point(position = position_dodge(width=0.75)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  ggtitle("Day 14: Control vs Plasmid logFC by MOI")
+
+```
 
 
 
