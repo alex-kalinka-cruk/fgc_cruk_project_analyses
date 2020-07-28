@@ -73,7 +73,8 @@ p1 <- qc %>%
   geom_smooth(method = "nls",
               formula = y ~ A - (A/(1+exp(-x*B))^(1/v)),
               method.args = list(start = c(A = -6.5, B = 2, v = 1.2)),
-              se=F)
+              se=F) +
+  ggtitle("Day 14: logFC effect size (NNMD) essential vs nonessential")
 
 ```
 
@@ -94,7 +95,7 @@ prob_pairing_non_neutral_guide <- function(moi, pe){
 }
 
 moi <- c(0.3, 0.75, 1, 2.12, 2.5, 5)
-ppair <- sapply(moi, prob_pairing_non_neutral_guide, 0.3)
+ppair <- sapply(moi, prob_pairing_non_neutral_guide, 0.1)
 
 data.frame(MOI = moi, prob_pair_ess = ppair) %>%
   ggplot(aes(MOI, prob_pair_ess)) +
@@ -106,6 +107,8 @@ data.frame(MOI = moi, prob_pair_ess = ppair) %>%
 ```
 
 # logFC
+
+## Essential vs Non-essential
 
 ```{r}
 lfc.pc <- lfc %>%
@@ -122,6 +125,52 @@ lfc.pc %>%
   ggtitle("Day 14: Control vs Plasmid logFC by MOI")
 
 ```
+
+## Control guides
+
+```{r}
+lfc %>%
+  filter(time_point == "day14" & GENE %in% c("Control",crispr_gene_sets$essential$hart_nonessential)) %>%
+  mutate(gene_group = ifelse(GENE %in% crispr_gene_sets$essential$hart_nonessential, "hart_nonessential","Control")) %>%
+  ggplot(aes(MOI, correctedFC, color = gene_group)) +
+  geom_point(position = position_dodge(width=0.75)) +
+  geom_boxplot(notch=T) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  ylim(-2.5,2) + 
+  ggtitle("Day 14: Control vs Plasmid logFC by MOI")
+
+```
+
+## SD vs MAD
+
+```{r}
+lfc %>%
+  filter(time_point == "day14") %>%
+  group_by(MOI) %>%
+  summarise(logFC_MAD = mad(correctedFC),
+            logFC_SD = sd(correctedFC)) %>%
+  ungroup() %>%
+  ggplot(aes(MOI, logFC_SD)) +
+  geom_bar(stat = "identity") +
+  ggtitle("SD of logFC by MOI")
+
+```
+
+## Delta across time points
+
+```{r}
+lfc %>%
+  filter(time_point == "day14") %>%
+  pivot_wider(id_cols = SEQID, names_from = MOI, names_prefix = "logFC_MOI_", values_from = correctedFC) %>%
+  mutate(abs_delta_logFC_MOI_0.3_5F = abs(logFC_MOI_0.3 - logFC_MOI_5F)) %>%
+  ggplot(aes(logFC_MOI_0.3, abs_delta_logFC_MOI_0.3_5F)) +
+  geom_hex() +
+  geom_smooth() +
+  geom_vline(xintercept = 0, linetype="dashed") +
+  ggtitle("logFC Delta: MOI 0.3 vs MOI 5F")
+
+```
+
 
 
 
