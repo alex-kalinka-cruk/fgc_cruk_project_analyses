@@ -34,30 +34,40 @@ rename <- dplyr::rename
 mutate <- dplyr::mutate
 
 qc <- readRDS(file = "../data/qc_techdev_0001.rds") %>%
-  filter(!grepl("T",MOI)) %>%
-  mutate(MOI = as.numeric(gsub("[T/F]","",MOI)))
+  #filter(!grepl("T",MOI)) %>%
+  mutate(moi = MOI, MOI = as.numeric(gsub("[T/F]","",MOI)))
 
 
 cleanr.files <- list.files("~/data/az_cruk/techdev_0001/", pattern = "Control_vs_Plasmid_correctedFCs.tsv",
                            full.names = T, recursive = T)
+counts.files <- list.files("~/data/az_cruk/techdev_0001/", pattern = "combined_counts.txt",
+                           full.names = T, recursive = T)
 
-read_lfc <- function(files){
+read_lfc <- function(files, type = "cleanr"){
   ret <- NULL
   for(file in files){
     if(!grepl("MOI",file)) next
     
-    comp <- gsub("^.*?(MOI.*)\\/cleanr.*$$","\\1",file)
+    comp <- gsub(paste("^.*?(MOI.*)\\/",type,".*$",sep=""),"\\1",file)
     moi <- gsub("^MOI-(.*?)-.*$","\\1",comp)
     time <- gsub("^MOI-.*?-(.*)$","\\1",comp)
-    
-    lfc <- read.delim(file, header=T, stringsAsFactors = F, sep="\t") %>%
+
+    td <- read.delim(file, header=T, stringsAsFactors = F, sep="\t")
+    if(type != "lfc"){    
+      td %<>%
+        pivot_longer(cols = starts_with("TECHDEV0001"), names_to = "sample_id", values_to = "count")
+    }
+    td %<>%
       mutate(comparison = comp, MOI = moi, time_point = time)
-    ret <- rbind(ret, lfc)
+    ret <- rbind(ret, td)
   }
   return(ret)
 }
 
+
+
 lfc <- read_lfc(cleanr.files)
+counts <- read_lfc(counts.files, type = "counts")
 
 
 ```
@@ -106,6 +116,26 @@ data.frame(MOI = moi, prob_pair_ess = ppair) %>%
 
 ```
 
+# Counts
+
+```{r}
+counts %>%
+  filter(time_point == "day14") %>%
+  ggplot(aes(MOI, count)) +
+  geom_point() +
+  geom_boxplot()
+
+counts %>%
+  filter(time_point == "day14" & gene %in% c(crispr_gene_sets$essential$pan_cancer_Sanger, 
+                     crispr_gene_sets$essential$hart_nonessential)) %>%
+  mutate(gene_group = ifelse(gene %in% crispr_gene_sets$essential$pan_cancer_Sanger, "pan_cancer_Sanger","hart_nonessential")) %>%
+  ggplot(aes(MOI, count, color = gene_group)) +
+  geom_point(position = position_dodge(width=0.75)) +
+  geom_boxplot()
+
+
+```
+
 # logFC
 
 ## Essential vs Non-essential
@@ -120,7 +150,7 @@ lfc.pc %>%
   filter(time_point == "day14") %>%
   ggplot(aes(MOI, correctedFC, color = gene_group)) +
   geom_point(position = position_dodge(width=0.75)) +
-  geom_boxplot() +
+  geom_boxplot(notch=T) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   ggtitle("Day 14: Control vs Plasmid logFC by MOI")
 
@@ -130,14 +160,22 @@ lfc.pc %>%
 
 ```{r}
 lfc %>%
-  filter(time_point == "day14" & GENE %in% c("Control",crispr_gene_sets$essential$hart_nonessential)) %>%
-  mutate(gene_group = ifelse(GENE %in% crispr_gene_sets$essential$hart_nonessential, "hart_nonessential","Control")) %>%
+  filter(time_point == "day14" & GENE %in% c("Control")) %>%
+  mutate(gene_group = "Control") %>%
   ggplot(aes(MOI, correctedFC, color = gene_group)) +
   geom_point(position = position_dodge(width=0.75)) +
   geom_boxplot(notch=T) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   ylim(-2.5,2) + 
   ggtitle("Day 14: Control vs Plasmid logFC by MOI")
+
+
+qc %>%
+    filter(time_point=="day14" & SampleClass!="plasmid") %>%
+    ggplot(aes(moi,NNMD_robust.ctrl_plasmid.control_guides,color=moi)) +
+    geom_point(cex = 3) +
+  geom_hline(yintercept = 0, linetype="dashed") +
+    ggtitle("Day 14: logFC differential (NNMD) of Non-targeting Controls")
 
 ```
 
@@ -171,6 +209,16 @@ lfc %>%
 
 ```
 
+## GICC
+
+```{r}
+qc %>%
+  filter(time_point=="day14" & SampleClass!="plasmid") %>%
+  ggplot(aes(moi,GICC.ctrl_plasmid.hart_nonessential,color=moi)) +
+  geom_point(cex = 3) +
+  ggtitle("Day 14: reproducibility of counts of non-essentials")
+
+```
 
 
 
