@@ -25,6 +25,7 @@ suppressMessages(library(ggplot2))
 suppressMessages(library(dplyr))
 suppressMessages(library(splines2))
 suppressMessages(library(patchwork))
+suppressMessages(library(ashr))
 suppressMessages(library(fgcQC))
 
 
@@ -32,6 +33,19 @@ filter <- dplyr::filter
 select <- dplyr::select
 rename <- dplyr::rename
 mutate <- dplyr::mutate
+
+
+yusa.v3.folds <- read.csv("../data/lib.yusa.v3-fold-free-energy.csv", stringsAsFactors = F) %>%
+  rowwise() %>%
+  mutate(id = gsub("^..(.*)$","\\1",id)) %>%
+  ungroup
+
+load("~/git-projects/crispRutils/data/yusa.v3.crisprn.annot.rda")
+
+lib <- read.delim("~/git-projects/az-cruk-crispr-pipeline-referencedata/libraries/yusa_v3_human.1/cleanr.tsv",
+                  header=F, skip=1, stringsAsFactors = F) %>%
+  left_join(yusa.v3.folds, by = c("V2" = "id")) %>%
+  mutate(GC_percent = 100*GC_fraction)
 
 qc <- readRDS(file = "../data/qc_techdev_0001.rds") %>%
   #filter(!grepl("T",MOI)) %>%
@@ -53,8 +67,9 @@ read_lfc <- function(files, type = "cleanr"){
     time <- gsub("^MOI-.*?-(.*)$","\\1",comp)
 
     td <- read.delim(file, header=T, stringsAsFactors = F, sep="\t")
-    if(type != "lfc"){    
+    if(type != "cleanr"){    
       td %<>%
+        rename(TECHDEV0001_plasmid = Yusa_v3_KO_Plasmid_FGC_batch_1) %>%
         pivot_longer(cols = starts_with("TECHDEV0001"), names_to = "sample_id", values_to = "count")
     }
     td %<>%
@@ -72,49 +87,6 @@ counts <- read_lfc(counts.files, type = "counts")
 
 ```
 
-# MOI empirical
-
-```{r}
-p1 <- qc %>%
-  filter(time_point == "day14") %>%
-  ggplot(aes(x=MOI, y=NNMD_robust.ctrl_plasmid.pan_cancer_Sanger)) +
-  geom_point() +
-  geom_hline(yintercept = 0, linetype="dashed") +
-  geom_smooth(method = "nls",
-              formula = y ~ A - (A/(1+exp(-x*B))^(1/v)),
-              method.args = list(start = c(A = -6.5, B = 2, v = 1.2)),
-              se=F) +
-  ggtitle("Day 14: logFC effect size (NNMD) essential vs nonessential")
-
-```
-
-
-# MOI theoretical 
-
-```{r}
-prob_pairing_non_neutral_guide <- function(moi, pe){
-  # max number of viruses per cell (at MOI of 5, ppois(20,5,lower.tail = F) < 1e-7)
-  max_n <- 20
-  n <- 2:max_n
-  ret <- NULL
-  for(i in n){
-    pb_nonzero <- 1 - dbinom(0, i, pe)
-    ret <- append(ret, dpois(i, moi) * pb_nonzero)
-  }
-  return(sum(ret))
-}
-
-moi <- c(0.3, 0.75, 1, 2.12, 2.5, 5)
-ppair <- sapply(moi, prob_pairing_non_neutral_guide, 0.1)
-
-data.frame(MOI = moi, prob_pair_ess = ppair) %>%
-  ggplot(aes(MOI, prob_pair_ess)) +
-  geom_point() +
-  geom_smooth(method = "lm",
-              formula = y ~ splines2::bSpline(x, df = 3),
-              se=F)
-
-```
 
 # Counts
 
@@ -197,19 +169,98 @@ lfc %>%
 ## Delta across time points
 
 ```{r}
-lfc %>%
+lfc.moi <- lfc %>%
   filter(time_point == "day14") %>%
-  pivot_wider(id_cols = SEQID, names_from = MOI, names_prefix = "logFC_MOI_", values_from = correctedFC) %>%
-  mutate(abs_delta_logFC_MOI_0.3_5F = abs(logFC_MOI_0.3 - logFC_MOI_5F)) %>%
-  ggplot(aes(logFC_MOI_0.3, abs_delta_logFC_MOI_0.3_5F)) +
+  pivot_wider(id_cols = SEQID, names_from = MOI, names_prefix = "logFC_MOI_", values_from = avgFC)
+
+lfc.moi %>%
+  mutate(abs_delta_logFC_MOI_0.3_2.12 = abs(logFC_MOI_0.3 - logFC_MOI_2.12)) %>%
+  ggplot(aes(logFC_MOI_0.3, abs_delta_logFC_MOI_0.3_2.12)) +
   geom_hex() +
   geom_smooth() +
   geom_vline(xintercept = 0, linetype="dashed") +
-  ggtitle("logFC Delta: MOI 0.3 vs MOI 5F")
+  ggtitle("logFC Delta: MOI 0.3 vs MOI 2.12")
+
+lfc.moi %<>%
+  mutate(abs_delta_logFC_MOI_0.3_2.12 = abs(logFC_MOI_0.3 - logFC_MOI_2.12),
+         abs_delta_logFC_MOI_0.3_2.5 = abs(logFC_MOI_0.3 - logFC_MOI_2.5),
+         abs_delta_logFC_MOI_0.3_5F = abs(logFC_MOI_0.3 - logFC_MOI_5F),
+         abs_delta_logFC_MOI_0.3_0.75 = abs(logFC_MOI_0.3 - logFC_MOI_0.75),
+         elevated_neutral_0.75 = (between(logFC_MOI_0.3,-0.8,0.8) & abs_delta_logFC_MOI_0.3_0.75 > 2),
+         elevated_neutral_2.12 = (between(logFC_MOI_0.3,-0.8,0.8) & abs_delta_logFC_MOI_0.3_2.12 > 2),
+         elevated_neutral_2.5 = (between(logFC_MOI_0.3,-0.8,0.8) & abs_delta_logFC_MOI_0.3_2.5 > 2),
+         elevated_neutral_5F = (between(logFC_MOI_0.3,-0.8,0.8) & abs_delta_logFC_MOI_0.3_5F > 2)) %>%
+  left_join(lib, by = c("SEQID" = "V2")) %>%
+  left_join(yusa.v3.crisprn.annot, by = c("SEQID" = "CODE"))
 
 ```
 
-## GICC
+## logFC shrinkage
+
+```{r}
+# Estimate standard error for individual sgRNA logFC values.
+calc_lfc_SE <- function(data, plasmid, comp){
+  pl <- sym(plasmid)
+  comp_1 <- sym(comp[1])
+  comp_2 <- sym(comp[2])
+  data %<>%
+    mutate(lfc_1 = log2(!!comp_1 + 5) - log2(!!pl + 5),
+           lfc_2 = log2(!!comp_2 + 5) - log2(!!pl + 5),
+           # Don't want SErrors of 0 (can't be shrunk by ashr).
+           lfc_1 = ifelse(lfc_1 == lfc_2, lfc_1 + 1, lfc_1),
+           lfcSE = sd(c(lfc_1,lfc_2))/sqrt(2))
+  return(data)
+}
+
+# MOI 0.3
+lfc.0.3.d14 <- counts %>%
+  filter(comparison == "MOI-0.3-day14") %>%
+  select(sample_id, sgRNA, gene, count) %>%
+  pivot_wider(id_cols = c(sgRNA,gene), names_from = sample_id, values_from = count) %>%
+  fgcQC::normalize_library_depth_median_ratio() %>%
+  fgcQC::calc_log2_fold_change_gRNAs(ref = "TECHDEV0001_plasmid", comp = c("TECHDEV0001_01_01_29","TECHDEV0001_01_01_30")) %>%
+  rowwise() %>%
+  calc_lfc_SE(., "TECHDEV0001_plasmid", c("TECHDEV0001_01_01_29","TECHDEV0001_01_01_30")) %>%
+  ungroup
+
+lfc.0.3.d14.ash <- ash(lfc.0.3.d14$log2FC, lfc.0.3.d14$lfcSE)
+
+lfc.0.3.d14 %<>%
+  mutate(log2FC.shrink = lfc.0.3.d14.ash$result$PosteriorMean,
+         gene_group = case_when(gene %in% crispr_gene_sets$essential$pan_cancer_Sanger ~ "pan_cancer_Sanger",
+                                gene %in% crispr_gene_sets$essential$hart_nonessential ~ "hart_nonessential",
+                                TRUE ~ "other")) %>%
+  rowwise() %>%
+  mutate(avgCount = mean(c(mean(c(TECHDEV0001_01_01_29,TECHDEV0001_01_01_30)),TECHDEV0001_plasmid))) %>%
+  ungroup
+
+# MOI 2.5
+lfc.2.5.d14 <- counts %>%
+  filter(comparison == "MOI-2.5-day14") %>%
+  select(sample_id, sgRNA, gene, count) %>%
+  pivot_wider(id_cols = c(sgRNA,gene), names_from = sample_id, values_from = count) %>%
+  fgcQC::normalize_library_depth_median_ratio() %>%
+  fgcQC::calc_log2_fold_change_gRNAs(ref = "TECHDEV0001_plasmid", comp = c("TECHDEV0001_01_01_37","TECHDEV0001_01_01_38")) %>%
+  rowwise() %>%
+  calc_lfc_SE(., "TECHDEV0001_plasmid", c("TECHDEV0001_01_01_37","TECHDEV0001_01_01_38")) %>%
+  ungroup
+
+lfc.2.5.d14.ash <- ash(lfc.2.5.d14$log2FC, lfc.2.5.d14$lfcSE)
+
+lfc.2.5.d14 %<>%
+  mutate(log2FC.shrink = lfc.2.5.d14.ash$result$PosteriorMean,
+         gene_group = case_when(gene %in% crispr_gene_sets$essential$pan_cancer_Sanger ~ "pan_cancer_Sanger",
+                                gene %in% crispr_gene_sets$essential$hart_nonessential ~ "hart_nonessential",
+                                TRUE ~ "other")) %>%
+  rowwise() %>%
+  mutate(avgCount = mean(c(mean(c(TECHDEV0001_01_01_37,TECHDEV0001_01_01_38)),TECHDEV0001_plasmid))) %>%
+  ungroup
+
+
+```
+
+
+# GICC
 
 ```{r}
 qc %>%
@@ -220,5 +271,50 @@ qc %>%
 
 ```
 
+# Appendix
+
+## MOI empirical
+
+```{r}
+p1 <- qc %>%
+  filter(time_point == "day14") %>%
+  ggplot(aes(x=MOI, y=NNMD_robust.ctrl_plasmid.pan_cancer_Sanger)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype="dashed") +
+  geom_smooth(method = "nls",
+              formula = y ~ A - (A/(1+exp(-x*B))^(1/v)),
+              method.args = list(start = c(A = -6.5, B = 2, v = 1.2)),
+              se=F) +
+  ggtitle("Day 14: logFC effect size (NNMD) essential vs nonessential")
+
+```
+
+
+## MOI theoretical 
+
+```{r}
+prob_pairing_non_neutral_guide <- function(moi, pe){
+  # max number of viruses per cell (at MOI of 5, ppois(20,5,lower.tail = F) < 1e-7)
+  max_n <- 20
+  n <- 2:max_n
+  ret <- NULL
+  for(i in n){
+    pb_nonzero <- 1 - dbinom(0, i, pe)
+    ret <- append(ret, dpois(i, moi) * pb_nonzero)
+  }
+  return(sum(ret))
+}
+
+moi <- c(0.3, 0.75, 1, 2.12, 2.5, 5)
+ppair <- sapply(moi, prob_pairing_non_neutral_guide, 0.1)
+
+data.frame(MOI = moi, prob_pair_ess = ppair) %>%
+  ggplot(aes(MOI, prob_pair_ess)) +
+  geom_point() +
+  geom_smooth(method = "lm",
+              formula = y ~ splines2::bSpline(x, df = 3),
+              se=F)
+
+```
 
 
