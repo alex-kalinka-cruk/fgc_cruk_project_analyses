@@ -236,7 +236,7 @@ gm_mean = function(x, na.rm=TRUE){
 
 fivemer_rnap_speed <- function(seq, type = "mttr"){
   fm <- c(sapply(seq, function(x) substring(x,1:(19-5+1),5:19)))
-  rnap_dens <- rnap_fivemer$WO.0.WO.Pauses[match(fm, rnap_fivemer$five_mer)]
+  rnap_dens <- rnap_fivemer$With.0.WO.Pauses.1[match(fm, rnap_fivemer$five_mer)]
   if(type == "median"){
     return(median(rnap_dens, na.rm=T))
   }else if(type == "mean"){
@@ -245,14 +245,21 @@ fivemer_rnap_speed <- function(seq, type = "mttr"){
     return(gm_mean(1/rnap_dens))
   }else if(type == "sd"){
     return(sd(1/rnap_dens))
+  }else if(type == "first"){
+    return(1/rnap_dens[1])
+  }else if(type == "begin"){
+    return(gm_mean(1/rnap_dens[1:2]))
+  }else if(type == "dcor"){
+    return(energy::dcor2d(1:length(rnap_dens),1/rnap_dens,type="U"))
   }
 }
 
 
 lfc.moi %<>%
   rowwise() %>%
-  mutate(rnap_speed.MTTR = fivemer_rnap_speed(V1, type = "mttr"),
-         rnap_speed.SD = fivemer_rnap_speed(V1, type = "sd")) %>%
+  mutate(#rnap_speed.MTTR = fivemer_rnap_speed(V1, type = "mttr"),
+         #rnap_speed.SD = fivemer_rnap_speed(V1, type = "sd"),
+         rnap_speed.dcor= fivemer_rnap_speed(V1, type = "begin")) %>%
   ungroup
 
 ```
