@@ -35,10 +35,9 @@ rename <- dplyr::rename
 mutate <- dplyr::mutate
 
 
-yusa.v3.folds <- read.csv("../data/lib.yusa.v3-fold-free-energy.csv", stringsAsFactors = F) %>%
-  rowwise() %>%
-  mutate(id = gsub("^..(.*)$","\\1",id)) %>%
-  ungroup
+rnap_fivemer <- read.csv("../data/rnap-II-yeast-fivemer-density.csv", stringsAsFactors = F)
+
+yusa.v3.folds <- read.csv("../data/lib.yusa.v3-plus-scaffold-free-energy.csv", stringsAsFactors = F)
 
 load("~/git-projects/crispRutils/data/yusa.v3.crisprn.annot.rda")
 
@@ -171,7 +170,22 @@ lfc %>%
 ```{r}
 lfc.moi <- lfc %>%
   filter(time_point == "day14") %>%
-  pivot_wider(id_cols = SEQID, names_from = MOI, names_prefix = "logFC_MOI_", values_from = avgFC)
+  pivot_wider(id_cols = SEQID, names_from = MOI, names_prefix = "logFC_MOI_", values_from = avgFC) %>%
+  mutate(logfc_neutral_MOI_0.3 = between(logFC_MOI_0.3,-0.8,0.8),
+         abs_delta_logFC_MOI_0.3_2.12 = abs(logFC_MOI_0.3 - logFC_MOI_2.12),
+         abs_delta_logFC_MOI_0.3_2.5 = abs(logFC_MOI_0.3 - logFC_MOI_2.5),
+         abs_delta_logFC_MOI_0.3_5F = abs(logFC_MOI_0.3 - logFC_MOI_5F),
+         abs_delta_logFC_MOI_0.3_0.75 = abs(logFC_MOI_0.3 - logFC_MOI_0.75),
+         abs_delta_logFC_MOI_0.3_1 = abs(logFC_MOI_0.3 - logFC_MOI_1),
+         elevated_neutral_0.75 = (between(logFC_MOI_0.3,-0.8,0.8) & abs_delta_logFC_MOI_0.3_0.75 > 2),
+         elevated_neutral_1 = (between(logFC_MOI_0.3,-0.8,0.8) & abs_delta_logFC_MOI_0.3_1 > 2),
+         elevated_neutral_2.12 = (between(logFC_MOI_0.3,-0.8,0.8) & abs_delta_logFC_MOI_0.3_2.12 > 2),
+         elevated_neutral_2.5 = (between(logFC_MOI_0.3,-0.8,0.8) & abs_delta_logFC_MOI_0.3_2.5 > 2),
+         elevated_neutral_5F = (between(logFC_MOI_0.3,-0.8,0.8) & abs_delta_logFC_MOI_0.3_5F > 2),
+         elevated_2.5_5F = (elevated_neutral_2.5 & elevated_neutral_5F),
+         elevated_either_2.5_5F = (elevated_neutral_2.5 | elevated_neutral_5F)) %>%
+  left_join(lib, by = c("SEQID" = "V2"))
+
 
 lfc.moi %>%
   mutate(abs_delta_logFC_MOI_0.3_2.12 = abs(logFC_MOI_0.3 - logFC_MOI_2.12)) %>%
@@ -181,19 +195,68 @@ lfc.moi %>%
   geom_vline(xintercept = 0, linetype="dashed") +
   ggtitle("logFC Delta: MOI 0.3 vs MOI 2.12")
 
-lfc.moi %<>%
-  mutate(abs_delta_logFC_MOI_0.3_2.12 = abs(logFC_MOI_0.3 - logFC_MOI_2.12),
-         abs_delta_logFC_MOI_0.3_2.5 = abs(logFC_MOI_0.3 - logFC_MOI_2.5),
-         abs_delta_logFC_MOI_0.3_5F = abs(logFC_MOI_0.3 - logFC_MOI_5F),
-         abs_delta_logFC_MOI_0.3_0.75 = abs(logFC_MOI_0.3 - logFC_MOI_0.75),
-         elevated_neutral_0.75 = (between(logFC_MOI_0.3,-0.8,0.8) & abs_delta_logFC_MOI_0.3_0.75 > 2),
-         elevated_neutral_2.12 = (between(logFC_MOI_0.3,-0.8,0.8) & abs_delta_logFC_MOI_0.3_2.12 > 2),
-         elevated_neutral_2.5 = (between(logFC_MOI_0.3,-0.8,0.8) & abs_delta_logFC_MOI_0.3_2.5 > 2),
-         elevated_neutral_5F = (between(logFC_MOI_0.3,-0.8,0.8) & abs_delta_logFC_MOI_0.3_5F > 2)) %>%
-  left_join(lib, by = c("SEQID" = "V2")) %>%
-  left_join(yusa.v3.crisprn.annot, by = c("SEQID" = "CODE"))
+
+lfc.moi%>%filter(logfc_neutral_MOI_0.3) %>%
+  ggplot(aes(logFC_MOI_2.5,logFC_MOI_5F)) +
+  geom_hex() +
+  geom_point(data = lfc.moi %>% filter(elevated_neutral_2.5), aes(color = "elevated_2.5")) + 
+  geom_point(data = lfc.moi %>% filter(elevated_neutral_5F), aes(color = "elevated_5F")) + 
+  geom_point(data = lfc.moi %>% filter(elevated_2.5_5F), aes(color = "elevated_both")) + 
+  geom_smooth() +
+  geom_hline(yintercept = 0.8,color="red") +
+  geom_hline(yintercept = -0.8,color="red") +
+  geom_vline(xintercept = -0.8,color="red") +
+  geom_vline(xintercept = 0.8,color="red")
 
 ```
+
+## RNApol III speed (using RNApol II yeast estimates)
+
+```{r}
+extract_5mer_counts <- function(seqs){
+  five_mers <- as.data.frame(table(c(sapply(seqs, function(x) substring(x,1:(19-5+1),5:19))))) %>%
+    rename(five_mer = Var1, count = Freq) %>%
+    mutate(frequency = count/sum(count))
+  return(five_mers)
+}
+
+five_mers.day14_moi2.5 <- rbind(extract_5mer_counts(lfc.moi$V1[(lfc.moi$elevated_neutral_2.5 | lfc.moi$elevated_neutral_5F)]) %>%
+                                  mutate(type = "depleted_neutral"),
+                                extract_5mer_counts(lfc.moi$V1[(!lfc.moi$elevated_neutral_2.5 & !lfc.moi$elevated_neutral_5F)]) %>%
+                                  mutate(type = "not_depleted"),
+                                extract_5mer_counts(sample(lfc.moi$V1, 309, replace = F)) %>%
+                                  mutate(type = "random"))
+
+```
+
+```{r}
+gm_mean = function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+
+fivemer_rnap_speed <- function(seq, type = "mttr"){
+  fm <- c(sapply(seq, function(x) substring(x,1:(19-5+1),5:19)))
+  rnap_dens <- rnap_fivemer$WO.0.WO.Pauses[match(fm, rnap_fivemer$five_mer)]
+  if(type == "median"){
+    return(median(rnap_dens, na.rm=T))
+  }else if(type == "mean"){
+    return(mean(rnap_dens, na.rm=T))
+  }else if(type == "mttr"){
+    return(gm_mean(1/rnap_dens))
+  }else if(type == "sd"){
+    return(sd(1/rnap_dens))
+  }
+}
+
+
+lfc.moi %<>%
+  rowwise() %>%
+  mutate(rnap_speed.MTTR = fivemer_rnap_speed(V1, type = "mttr"),
+         rnap_speed.SD = fivemer_rnap_speed(V1, type = "sd")) %>%
+  ungroup
+
+```
+
 
 ## logFC shrinkage
 
