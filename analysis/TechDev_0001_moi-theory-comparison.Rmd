@@ -177,13 +177,15 @@ lfc.moi <- lfc %>%
          abs_delta_logFC_MOI_0.3_5F = abs(logFC_MOI_0.3 - logFC_MOI_5F),
          abs_delta_logFC_MOI_0.3_0.75 = abs(logFC_MOI_0.3 - logFC_MOI_0.75),
          abs_delta_logFC_MOI_0.3_1 = abs(logFC_MOI_0.3 - logFC_MOI_1),
-         elevated_neutral_0.75 = (between(logFC_MOI_0.3,-0.8,0.8) & abs_delta_logFC_MOI_0.3_0.75 > 2),
-         elevated_neutral_1 = (between(logFC_MOI_0.3,-0.8,0.8) & abs_delta_logFC_MOI_0.3_1 > 2),
-         elevated_neutral_2.12 = (between(logFC_MOI_0.3,-0.8,0.8) & abs_delta_logFC_MOI_0.3_2.12 > 2),
-         elevated_neutral_2.5 = (between(logFC_MOI_0.3,-0.8,0.8) & abs_delta_logFC_MOI_0.3_2.5 > 2),
-         elevated_neutral_5F = (between(logFC_MOI_0.3,-0.8,0.8) & abs_delta_logFC_MOI_0.3_5F > 2),
+         elevated_neutral_0.75 = (logfc_neutral_MOI_0.3 & abs(logFC_MOI_0.75) > 2),
+         elevated_neutral_1 = (logfc_neutral_MOI_0.3 & abs(logFC_MOI_1) > 2),
+         elevated_neutral_2.12 = (logfc_neutral_MOI_0.3 & abs(logFC_MOI_2.12) > 2),
+         elevated_neutral_2.5 = (logfc_neutral_MOI_0.3 & abs(abs(logFC_MOI_2.5)) > 2),
+         elevated_neutral_5F = (logfc_neutral_MOI_0.3 & abs(logFC_MOI_5F) > 2),
+         elevated_neutral_5T = (logfc_neutral_MOI_0.3 & abs(logFC_MOI_5T) > 2),
          elevated_2.5_5F = (elevated_neutral_2.5 & elevated_neutral_5F),
-         elevated_either_2.5_5F = (elevated_neutral_2.5 | elevated_neutral_5F)) %>%
+         elevated_either_2.5_5F = (elevated_neutral_2.5 | elevated_neutral_5F),
+         elevated_high_moi = (elevated_neutral_2.5 | elevated_neutral_2.12 | elevated_neutral_5F | elevated_neutral_5T)) %>%
   left_join(lib, by = c("SEQID" = "V2"))
 
 
@@ -261,7 +263,7 @@ lfc.moi %<>%
   rowwise() %>%
   mutate(#rnap_speed.MTTR = fivemer_rnap_speed(V1, type = "mttr"),
          #rnap_speed.SD = fivemer_rnap_speed(V1, type = "sd"),
-         rnap_speed.1 = fivemer_rnap_speed(V1, type = "pos"),
+         rnap_speed.1 = fivemer_rnap_speed(V1, type = "pos", pos=1),
          rnap_speed.2 = fivemer_rnap_speed(V1, type = "pos", pos=2),
          rnap_speed.3 = fivemer_rnap_speed(V1, type = "pos", pos=3),
          rnap_speed.4 = fivemer_rnap_speed(V1, type = "pos", pos=4),
@@ -286,9 +288,51 @@ rnap_sp.bases <- lfc.moi %>%
   ungroup
 
 rnap_sp.bases.av <- rnap_sp.bases %>%
-  group_by(elevated_either_2.5_5F, fivemer_position) %>%
+  group_by(elevated_high_moi, fivemer_position) %>%
   summarise(RNApol_speed.mean = mean(RNApol_speed)) %>%
   ungroup
+
+rnap_sp.bases.av %>%
+  ggplot(aes(fivemer_position,RNApol_speed.mean,color=elevated_high_moi)) +
+  geom_point() +
+  geom_line() +
+  xlim(1,15)
+
+# Random sample.
+rnap_sp.bases.random <- rnap_sp.bases %>% 
+  filter(logfc_neutral_MOI_0.3) %>%
+  mutate(random_guides = SEQID %in% sample(SEQID,910,replace=F)) %>%
+  filter(random_guides) %>%
+  group_by(fivemer_position) %>%
+  summarise(RNApol_speed.mean = mean(RNApol_speed)) %>%
+  ungroup %>%
+  mutate(type = "random_910")
+
+rnap_sp.bases.av %>%
+  mutate(type = ifelse(elevated_either_2.5_5F,"depleted_neutral","background")) %>%
+  select(-elevated_either_2.5_5F) %>%
+  rbind(rnap_sp.bases.random) %>%
+  ggplot(aes(fivemer_position,RNApol_speed.mean,color=type)) +
+  geom_point() +
+  geom_line() +
+  xlim(1,15)
+
+rnap_pos_summ <- rnap_sp.bases %>%
+  group_by(SEQID) %>%
+  summarise(logFC_MOI_2.5 = logFC_MOI_2.5, logFC_MOI_5F = logFC_MOI_5F, logfc_neutral_MOI_0.3 = logfc_neutral_MOI_0.3,
+            elevated_either_2.5_5F = elevated_either_2.5_5F,
+            elevated_neutral_2.5 = elevated_neutral_2.5,
+            rnap_speed.mean_1_13_14 = mean(c(RNApol_speed[fivemer_position==1],
+                                             RNApol_speed[fivemer_position==13],
+                                             RNApol_speed[fivemer_position==14]))) %>%
+  ungroup
+
+rnap_pos_summ %>%
+  filter(elevated_neutral_2.5) %>%
+  ggplot(aes(rnap_speed.mean_1_13_14,logFC_MOI_2.5)) +
+  geom_hex() +
+  geom_smooth()
+
 
 ```
 
