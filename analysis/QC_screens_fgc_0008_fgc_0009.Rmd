@@ -24,8 +24,8 @@ suppressMessages(library(magrittr))
 suppressMessages(library(readr))
 suppressMessages(library(ggplot2))
 suppressMessages(library(dplyr))
-suppressMessages(library(crispRutils))
-suppressMessages(library(GICC))
+suppressMessages(library(fgcQC))
+
 
 select <- dplyr::select
 filter <- dplyr::filter
@@ -76,10 +76,11 @@ read_cleanr_lfc <- function(files, project_id){
                                  num_reps = num_reps, stringsAsFactors = F))
   }
   return(ret %>%
-           mutate(gene_group = case_when(GENE %in% ess.genes$bagel_essential ~ "essential_Hart",
-                                         GENE %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
-                                         GENE %in% ess.genes$bagel_nonessential ~ "non_essential_Hart",
-                                         GENE %in% mod_fitness.genes ~ "moderately_negative",
+           mutate(gene_group = case_when(GENE %in% crispr_gene_sets$essential$hart_essential ~ "essential_Hart",
+                                         GENE %in% crispr_gene_sets$essential$pan_cancer_Sanger ~ "pan_cancer_Sanger",
+                                         GENE %in% crispr_gene_sets$essential$hart_nonessential ~ "non_essential_Hart",
+                                         GENE %in% crispr_gene_sets$essential$moderately_negative ~ "moderately_negative",
+                                         GENE %in% crispr_gene_sets$essential$weakly_negative ~ "weakly_negative",
                                          TRUE ~ "Other")))
 }
 
@@ -120,10 +121,11 @@ norm_counts <- function(data){
     mutate(!!sym(samples[1]) := mdn.ctrl * !!sym(samples[1])/csums[names(csums)==samples[1]],
          !!sym(samples[2]) := mdn.ctrl * !!sym(samples[2])/csums[names(csums)==samples[2]],
          Yusa_v3_KO_Plasmid_FGC_batch_1 = mdn.ctrl*Yusa_v3_KO_Plasmid_FGC_batch_1/csums[names(csums)=="Yusa_v3_KO_Plasmid_FGC_batch_1"],
-         gene_group = case_when(gene %in% ess.genes$bagel_essential ~ "essential_Hart",
-                                gene %in% ess.genes$pan_cancer_Sanger ~ "pan_cancer_Sanger",
-                                gene %in% ess.genes$bagel_nonessential ~ "non_essential_Hart",
-                                gene %in% mod_fitness.genes ~ "moderately_negative",
+         gene_group = case_when(gene %in% crispr_gene_sets$essential$hart_essential ~ "essential_Hart",
+                                         gene %in% crispr_gene_sets$essential$pan_cancer_Sanger ~ "pan_cancer_Sanger",
+                                         gene %in% crispr_gene_sets$essential$hart_nonessential ~ "non_essential_Hart",
+                                         gene %in% crispr_gene_sets$essential$moderately_negative ~ "moderately_negative",
+                                         gene %in% crispr_gene_sets$essential$weakly_negative ~ "weakly_negative",
                                 TRUE ~ "Other"))
   if(length(samples) == 3){
     data.norm %<>%
@@ -172,8 +174,10 @@ data.bagel.hart.8 <- read_bagel_output(bagel.8.files, ess="hart")
 data.bagel.hart.9 <- read_bagel_output(bagel.9.files, ess="hart")
 data.bagel.sang.8 <- read_bagel_output(bagel.8.files, ess="sanger")
 data.bagel.sang.9 <- read_bagel_output(bagel.9.files, ess="sanger")
-data.bagel.mf.8 <- read_bagel_output(bagel.8.files, ess=genes.mod_fitn)
-data.bagel.mf.9 <- read_bagel_output(bagel.9.files, ess=genes.mod_fitn)
+data.bagel.mf.8 <- read_bagel_output(bagel.8.files, ess=crispr_gene_sets$essential$moderately_negative)
+data.bagel.mf.9 <- read_bagel_output(bagel.9.files, ess=crispr_gene_sets$essential$moderately_negative)
+data.bagel.wf.8 <- read_bagel_output(bagel.8.files, ess=crispr_gene_sets$essential$weakly_negative)
+data.bagel.wf.9 <- read_bagel_output(bagel.9.files, ess=crispr_gene_sets$essential$weakly_negative)
 
 ```
 
@@ -393,6 +397,27 @@ pr.mf <- rbind(data.bagel.mf.8 %>%
             do(data.frame(get_PRROC(., "BF", group_col = "replicates"))) %>%
             mutate(screen="09"))
 
+pr.wf <- rbind(data.bagel.wf.8 %>%
+                   filter(time_point == "d7") %>%
+                   group_by(replicates) %>%
+                   do(data.frame(get_PRROC(., "BF", group_col = "replicates"))) %>% 
+                   mutate(screen="08"),
+          data.bagel.wf.9 %>%
+            filter(time_point == "d7") %>%
+            group_by(replicates) %>% 
+            do(data.frame(get_PRROC(., "BF", group_col = "replicates"))) %>%
+            mutate(screen="09"))
+
+roc.wf <- rbind(data.bagel.wf.8 %>%
+                   filter(time_point == "d7") %>%
+                   group_by(replicates) %>%
+                   do(data.frame(get_PRROC(., "BF", group_col = "replicates"))) %>% 
+                   mutate(screen="08"),
+          data.bagel.wf.9 %>%
+            filter(time_point == "d7") %>%
+            group_by(replicates) %>% 
+            do(data.frame(get_PRROC(., "BF", group_col = "replicates"))) %>%
+            mutate(screen="09"))
 
 ggplot(pr.sang, aes(Recall,Precision,color=screen, group=replicates)) +
   geom_line() +
@@ -414,6 +439,14 @@ ggplot(pr.mf, aes(Recall,Precision,color=screen, group=replicates)) +
   geom_segment(aes(x = 0.75, y = 0.2, xend = 0.75, yend = 0.9), linetype = "dashed", color="black") +
   geom_segment(aes(x = 0.71, y = 0.2, xend = 0.71, yend = 0.9), linetype = "dashed", color="black") +
   ggtitle("Precision-Recall: Day 7, 2 reps, Moderately Negative fitness genes (DepMap)")
+
+ggplot(pr.wf, aes(Recall,Precision,color=screen, group=replicates)) +
+  geom_line() +
+  geom_hline(yintercept = 0.5, linetype = "dashed") +
+  #geom_segment(aes(x = 0.75, y = 0.9, xend = -0.02, yend = 0.9), linetype = "dashed", color="black") +
+  #geom_segment(aes(x = 0.71, y = 0.2, xend = 0.71, yend = 0.9), linetype = "dashed", color="black") +
+  #geom_segment(aes(x = 0.75, y = 0.2, xend = 0.75, yend = 0.9), linetype = "dashed", color="black") +
+  ggtitle("Precision-Recall: Day 7, 2 reps, Weakly Negative fitness genes (DepMap)")
 
 pr.sang.later <- rbind(data.bagel.sang.8 %>%
                    filter(time_point == "d14") %>%
