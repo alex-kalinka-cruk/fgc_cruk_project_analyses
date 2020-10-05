@@ -1,0 +1,200 @@
+---
+title: 'FGC_0014: A-549 LIMD1-/- newly essential genes'
+author: "Alex Kalinka"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    depth: 3
+    highlight: tango
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+---
+
+# Setup
+
+```{r,echo=F}
+options(warn=-1)
+
+suppressMessages(library(knitr))
+suppressMessages(library(tidyr))
+suppressMessages(library(magrittr))
+suppressMessages(library(readr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(dplyr))
+
+base_path <- "~/data/az_cruk/fgc_0014-DiffLethality"
+
+# Parental essentiality: control-vs-plasmid
+# LIMD1-/- essentiality: treatment-vs-plasmid
+# Parental - LIMD1-/- differential lethality: treatment-vs-plasmid.
+read_diff_leth <- function(dir){
+  files <- list.files(dir, recursive = T, full.names = T, pattern = "gene_summary.txt$")
+  ret <- list()
+  for(file in files){
+    name <- gsub("^.*?\\/mageck\\/(\\S+?)\\.gene_summary.txt$","\\1",file)
+    data <- read.delim(file, stringsAsFactors = F)
+    if(name == "Control_vs_Plasmid"){
+      ret$Parental_lethality <- data
+      ret$Parental_essential_genes <- (data %>% 
+                                         dplyr::filter(neg.fdr < 0.1))$id
+    }else if(name == "Treatment_vs_Plasmid"){
+      ret$LIMD1_KO_lethality <- data
+      ret$LIMD1_KO_essential_genes <- (data %>% 
+                                         dplyr::filter(neg.fdr < 0.1))$id
+    }else if(name == "Treatment_vs_Control"){
+      ret$Diff_lethality <- data
+      ret$Loss_LIMD1 <- (data %>% 
+                           dplyr::filter(neg.fdr < 0.1))$id
+      ret$Loss_PAR <- (data %>% 
+                           dplyr::filter(pos.fdr < 0.1))$id
+    }else{
+      stop(paste("unknown comparison:",name))
+    }
+  }
+  if(!"Parental_lethality" %in% names(ret)) stop("unable to find 'Control_vs_Plasmid' mageck output")
+  if(!"LIMD1_KO_lethality" %in% names(ret)) stop("unable to find 'Treatment_vs_Plasmid' mageck output")
+  if(!"Diff_lethality" %in% names(ret)) stop("unable to find 'Treatment_vs_Plasmid' mageck output")
+  
+  ret$par_limd1_essential <- ret$Parental_lethality %>%
+    dplyr::inner_join(ret$LIMD1_KO_lethality, by = "id", suffix = c(".Parental",".LIMD1")) %>%
+    dplyr::rowwise() %>%
+    dplyr::mutate(FDR = min(c(neg.fdr.Parental, neg.fdr.LIMD1))) %>%
+    dplyr::ungroup()
+  
+  ret$LIMD1_newly_essential <- setdiff(ret$LIMD1_KO_essential_genes, ret$Parental_essential_genes)
+  ret$LIMD1_lost_essential <- setdiff(ret$Parental_essential_genes, ret$LIMD1_KO_essential_genes)
+  ret$Diff_lethality %<>%
+        dplyr::rowwise() %>%
+        dplyr::mutate(FDR = min(c(neg.fdr, pos.fdr)), 
+                      logFC = ifelse(neg.fdr < pos.fdr, neg.lfc, pos.lfc), 
+                      `-log10_FDR` = -log10(FDR)) %>%
+        dplyr::ungroup() %>%
+        dplyr::mutate(sig = FDR < 0.1,
+                      type = dplyr::case_when((sig & id %in% ret$LIMD1_newly_essential) ~ "Gain-Ess_LIMD1",
+                                              (sig & id %in% ret$LIMD1_lost_essential) ~ "Loss-Ess_LIMD1",
+                                              TRUE ~ "Unchanged-Ess"))
+  return(ret)
+}
+
+# Add Bagel results to create a union of Bagel-Mageck essential genes.
+add_bagel <- function(data, dir){
+  # data - return object from 'read_diff_leth'.
+  # dir - path to pipeline output for 1 screen.
+  thresh_file <- list.files(dir, recursive=T, pattern = "EssentialityThresh_fgcQc.tsv", full.names = T)
+  bagel_files <- list.files(dir, recursive=T, pattern = ".bf", full.names = T)
+  bagel_thresh <- read.delim(thresh_file, stringsAsFactors = F)$value[1]
+  for(file in bagel_files){
+    if(grepl("Control_vs_Plasmid.bf",file)){
+      data$Parental_bagel <- read.delim(file, stringsAsFactors = F)
+      data$Parental_essential_genes_bagel <- (data$Parental_bagel %>%
+                                          dplyr::filter(BF > bagel_thresh))$GENE
+    }else if(grepl("Treatment_vs_Plasmid.bf",file)){
+      data$LIMD1_bagel <- read.delim(file, stringsAsFactors = F)
+      data$LIMD1_essential_genes_bagel <- (data$LIMD1_bagel %>%
+                                          dplyr::filter(BF > bagel_thresh))$GENE
+    }else{
+      stop(paste("unknown bagel file:",file))
+    }
+  }
+  data$Parental_essential_union <- union(data$Parental_essential_genes, data$Parental_essential_genes_bagel)
+  data$LIMD1_essential_union <- union(data$LIMD1_KO_essential_genes, data$LIMD1_essential_genes_bagel)
+  data$LIMD1_newly_essential_union <- setdiff(data$LIMD1_essential_union, data$Parental_essential_union)
+  data$LIMD1_lost_essential_union <- setdiff(data$Parental_essential_union, data$LIMD1_essential_union)
+  data$Diff_lethality %<>%
+    dplyr::mutate(typeU = dplyr::case_when((sig & id %in% data$LIMD1_newly_essential_union) ~ "Gain-Ess_LIMD1",
+                                           (sig & id %in% data$LIMD1_lost_essential_union) ~ "Loss-Ess_LIMD1",
+                                           TRUE ~ "Unchanged"))
+  return(data)
+}
+
+
+# Plots.
+plot_DiffLeth <- function(data, screen_name){
+  # LogFC scatterplot for parental and LIMD1.
+  paired <- data$par_limd1_essential %>%
+    ggplot() +
+    geom_point(data = data$par_limd1_essential,
+               aes(neg.lfc.Parental, neg.lfc.LIMD1, color = -log10(FDR))) +
+    geom_text(data = data$par_limd1_essential %>% 
+                dplyr::filter(id %in% data$Diff_lethality$id[data$Diff_lethality$typeU=="Gain-Ess_LIMD1"]),
+              aes(neg.lfc.Parental, neg.lfc.LIMD1, label = id, hjust=0, vjust=0)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_vline(xintercept = 0, linetype = "dashed") +
+    ggtitle(paste("Essential logFC Parental vs LIMD1:",screen_name))
+  print(paired)
+  
+  # Volcano plot for parental-vs-limd1.
+  volc <- data$Diff_lethality %>%
+    ggplot(aes(logFC,`-log10_FDR`)) +
+    geom_point() +
+    geom_point(data = data$Diff_lethality %>%
+                 dplyr::filter(typeU == "Gain-Ess_LIMD1"),
+               aes(logFC,`-log10_FDR`, color = "Gain-Ess_LIMD1")) +
+    geom_point(data = data$Diff_lethality %>%
+                 dplyr::filter(typeU == "Loss-Ess_LIMD1"),
+               aes(logFC,`-log10_FDR`, color = "Loss-Ess_LIMD1")) + 
+    geom_text(data = data$Diff_lethality %>% 
+                dplyr::filter(typeU == "Gain-Ess_LIMD1"),
+              aes(logFC, `-log10_FDR`, label = id, hjust = 0, vjust = 0)) +
+    ggtitle(paste("logFC(LIMD1/Parental):",screen_name))
+  print(volc)
+}
+
+
+```
+
+# Screen 1
+
+## Day 10
+
+```{r}
+path <- file.path(base_path, "A549-DiffLeth-parental-LIMD1-day10-scrn-1")
+day10_scr1 <- read_diff_leth(path) %>%
+  add_bagel(path)
+
+plot_DiffLeth(day10_scr1, "Day 10, Screen 1")
+
+
+```
+
+## Day 17
+
+```{r}
+path <- file.path(base_path, "A549-DiffLeth-parental-LIMD1-day17-scrn-1")
+day17_scr1 <- read_diff_leth(path) %>%
+  add_bagel(path)
+
+plot_DiffLeth(day17_scr1, "Day 17, Screen 1")
+
+
+```
+
+# Screen 2
+
+## Day 11
+
+```{r,eval=F}
+path <- file.path(base_path, "A549-DiffLeth-parental-LIMD1-day11-scrn-2")
+day11_scr2 <- read_diff_leth(path) %>%
+  add_bagel(path)
+
+plot_DiffLeth(day11_scr2, "Day 11, Screen 2")
+
+
+```
+
+## Day 21
+
+```{r}
+path <- file.path(base_path, "A549-DiffLeth-parental-LIMD1-day21-scrn-2")
+day21_scr2 <- read_diff_leth(path) %>%
+  add_bagel(path)
+
+plot_DiffLeth(day21_scr2, "Day 21, Screen 2")
+
+
+```
+
