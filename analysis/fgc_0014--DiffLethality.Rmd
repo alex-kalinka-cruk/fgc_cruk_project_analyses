@@ -114,6 +114,15 @@ add_bagel <- function(data, dir){
 
 # Plots.
 plot_DiffLeth <- function(data, screen_name){
+  # Remove genes with multimapping guides.
+  data$par_limd1_essential %<>%
+    dplyr::filter(!id %in% crispr_libs_annot_data$knockout$yusa_v3_human$v1$multimapping_guides$genes &
+                    id != "Control")
+  
+  data$Diff_lethality %<>%
+    dplyr::filter(!id %in% crispr_libs_annot_data$knockout$yusa_v3_human$v1$multimapping_guides$genes & 
+                    id != "Control")
+  
   # LogFC scatterplot for parental and LIMD1.
   paired <- data$par_limd1_essential %>%
     ggplot() +
