@@ -15,7 +15,7 @@ output:
 
 # Setup
 
-```{r,echo=F}
+```{r}
 options(warn=-1)
 
 suppressMessages(library(knitr))
