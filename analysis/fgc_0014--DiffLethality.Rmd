@@ -1,5 +1,5 @@
 ---
-title: 'FGC_0014: A-549 LIMD1-/- newly essential genes'
+title: 'FGC_0014: A-549 LIMD1-/- synthetic lethality'
 author: "Alex Kalinka"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -24,6 +24,7 @@ suppressMessages(library(magrittr))
 suppressMessages(library(readr))
 suppressMessages(library(ggplot2))
 suppressMessages(library(dplyr))
+suppressMessages(library(crispRutils))
 
 base_path <- "~/data/az_cruk/fgc_0014-DiffLethality"
 
@@ -118,12 +119,17 @@ plot_DiffLeth <- function(data, screen_name){
     ggplot() +
     geom_point(data = data$par_limd1_essential,
                aes(neg.lfc.Parental, neg.lfc.LIMD1, color = -log10(FDR))) +
-    geom_text(data = data$par_limd1_essential %>% 
-                dplyr::filter(id %in% data$Diff_lethality$id[data$Diff_lethality$typeU=="Gain-Ess_LIMD1"]),
-              aes(neg.lfc.Parental, neg.lfc.LIMD1, label = id, hjust=0, vjust=0)) +
     geom_hline(yintercept = 0, linetype = "dashed") +
     geom_vline(xintercept = 0, linetype = "dashed") +
     ggtitle(paste("Essential logFC Parental vs LIMD1:",screen_name))
+  
+  if("Gain-Ess_LIMD1" %in% data$Diff_lethality$typeU){
+    paired <- paired +
+      geom_text(data = data$par_limd1_essential %>% 
+                dplyr::filter(id %in% data$Diff_lethality$id[data$Diff_lethality$typeU=="Gain-Ess_LIMD1"]),
+              aes(neg.lfc.Parental, neg.lfc.LIMD1, label = id, hjust=0, vjust=0))
+  }
+  
   print(paired)
   
   # Volcano plot for parental-vs-limd1.
@@ -131,15 +137,20 @@ plot_DiffLeth <- function(data, screen_name){
     ggplot(aes(logFC,`-log10_FDR`)) +
     geom_point() +
     geom_point(data = data$Diff_lethality %>%
+                 dplyr::filter(typeU == "Loss-Ess_LIMD1"),
+               aes(logFC,`-log10_FDR`, color = "Loss-Ess_LIMD1")) +
+    ggtitle(paste("logFC(LIMD1/Parental):",screen_name))
+  
+  if("Gain-Ess_LIMD1" %in% data$Diff_lethality$typeU){
+    volc <- volc +
+      geom_point(data = data$Diff_lethality %>%
                  dplyr::filter(typeU == "Gain-Ess_LIMD1"),
                aes(logFC,`-log10_FDR`, color = "Gain-Ess_LIMD1")) +
-    geom_point(data = data$Diff_lethality %>%
-                 dplyr::filter(typeU == "Loss-Ess_LIMD1"),
-               aes(logFC,`-log10_FDR`, color = "Loss-Ess_LIMD1")) + 
-    geom_text(data = data$Diff_lethality %>% 
+      geom_text(data = data$Diff_lethality %>% 
                 dplyr::filter(typeU == "Gain-Ess_LIMD1"),
-              aes(logFC, `-log10_FDR`, label = id, hjust = 0, vjust = 0)) +
-    ggtitle(paste("logFC(LIMD1/Parental):",screen_name))
+              aes(logFC, `-log10_FDR`, label = id, hjust = 0, vjust = 0))
+  }
+  
   print(volc)
 }
 
@@ -157,7 +168,6 @@ day10_scr1 <- read_diff_leth(path) %>%
 
 plot_DiffLeth(day10_scr1, "Day 10, Screen 1")
 
-
 ```
 
 ## Day 17
@@ -169,20 +179,18 @@ day17_scr1 <- read_diff_leth(path) %>%
 
 plot_DiffLeth(day17_scr1, "Day 17, Screen 1")
 
-
 ```
 
 # Screen 2
 
 ## Day 11
 
-```{r,eval=F}
+```{r}
 path <- file.path(base_path, "A549-DiffLeth-parental-LIMD1-day11-scrn-2")
 day11_scr2 <- read_diff_leth(path) %>%
   add_bagel(path)
 
 plot_DiffLeth(day11_scr2, "Day 11, Screen 2")
-
 
 ```
 
@@ -195,6 +203,77 @@ day21_scr2 <- read_diff_leth(path) %>%
 
 plot_DiffLeth(day21_scr2, "Day 21, Screen 2")
 
+```
+
+## Union of hits
+
+### Gain of essentiality
+
+```{r}
+gain_hits_union <- unique(c((day10_scr1$Diff_lethality %>% dplyr::filter(typeU == "Gain-Ess_LIMD1"))$id,
+                     (day17_scr1$Diff_lethality %>% dplyr::filter(typeU == "Gain-Ess_LIMD1"))$id,
+                     (day11_scr2$Diff_lethality %>% dplyr::filter(typeU == "Gain-Ess_LIMD1"))$id,
+                     (day21_scr2$Diff_lethality %>% dplyr::filter(typeU == "Gain-Ess_LIMD1"))$id))
+```
+
+Selenocysteine incorporation enriched.
+
+PUM3 alias: KIAA0020
+
+![](../images/string-fgc_0014-diff-lethality.png)
+![](../images/string-fgc_0014-enrichments.png)
+
+### Loss of essentiality
+
+```{r}
+loss_hits_union <- unique(c((day10_scr1$Diff_lethality %>% dplyr::filter(typeU == "Loss-Ess_LIMD1"))$id,
+                     (day17_scr1$Diff_lethality %>% dplyr::filter(typeU == "Loss-Ess_LIMD1"))$id,
+                     (day11_scr2$Diff_lethality %>% dplyr::filter(typeU == "Loss-Ess_LIMD1"))$id,
+                     (day21_scr2$Diff_lethality %>% dplyr::filter(typeU == "Loss-Ess_LIMD1"))$id))
+
+```
+
+Very strong enrichment for mitochondrial oxidative phosphorylation.
+
+![](../images/string-fgc_0014-loss.png)
+
+![](../images/string-fgc_0014-loss-enrichments.png)
+
+# QC
+
+## Day 10, screen 1
+
+```{r}
+qc <- readRDS(file.path(base_path,"A549-DiffLeth-parental-LIMD1-day10-scrn-1/qc/QC_fgc.rds"))
+
+plot_perf_curves_fgcQC(qc, "PrRc")
+
+```
+
+## Day 17, screen 1
+
+```{r}
+qc <- readRDS(file.path(base_path,"A549-DiffLeth-parental-LIMD1-day17-scrn-1/qc/QC_fgc.rds"))
+
+plot_perf_curves_fgcQC(qc, "PrRc")
+
+```
+
+## Day 11, screen 2
+
+```{r}
+qc <- readRDS(file.path(base_path,"A549-DiffLeth-parental-LIMD1-day11-scrn-2/qc/QC_fgc.rds"))
+
+plot_perf_curves_fgcQC(qc, "PrRc")
+
+```
+
+## Day 21, screen 2
+
+```{r}
+qc <- readRDS(file.path(base_path,"A549-DiffLeth-parental-LIMD1-day21-scrn-2/qc/QC_fgc.rds"))
+
+plot_perf_curves_fgcQC(qc, "PrRc")
 
 ```
 

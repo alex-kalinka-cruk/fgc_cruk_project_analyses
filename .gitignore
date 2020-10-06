@@ -2,6 +2,7 @@
 analysis/*_report.html
 data/*_hit_table.csv
 
+.DS_Store
 *.Rproj
 
 # History files
