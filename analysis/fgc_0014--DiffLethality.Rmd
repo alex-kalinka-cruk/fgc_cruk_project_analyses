@@ -214,9 +214,14 @@ plot_DiffLeth(day21_scr2, "Day 21, Screen 2")
 
 ```
 
-## Union of hits
+# Union of hits
 
-### Gain of essentiality
+## Gain of essentiality in LIMD1-/-
+
+Defined as:
+
+1. Called as essential in LIMD1-/- (Bagel or Mageck) and **not** called as essential in Parental (Bagel or Mageck).
+2. An FDR < 0.1 in LIMD1-/- vs Parental Mageck comparison for negative fold-change cases.
 
 ```{r}
 gain_hits_union <- unique(c((day10_scr1$Diff_lethality %>% dplyr::filter(typeU == "Gain-Ess_LIMD1"))$id,
@@ -225,14 +230,64 @@ gain_hits_union <- unique(c((day10_scr1$Diff_lethality %>% dplyr::filter(typeU =
                      (day21_scr2$Diff_lethality %>% dplyr::filter(typeU == "Gain-Ess_LIMD1"))$id))
 ```
 
-Selenocysteine incorporation enriched.
+Enriched for **Selenocysteine incorporation**.
 
-PUM3 alias: KIAA0020
-
-![](../images/string-fgc_0014-diff-lethality.png)
+![NOTE: PUM3 alias KIAA0020 shown below.](../images/string-fgc_0014-diff-lethality.png)
 ![](../images/string-fgc_0014-enrichments.png)
 
-### Loss of essentiality
+## Depleted and essential in LIMD1-/-
+
+Defined as:
+
+1. Called as essential in LIMD1-/- (Bagel or Mageck).
+2. An FDR < 0.1 in LIMD1-/- vs Parental Mageck comparison for negative fold-change cases.
+
+```{r}
+depleted_ess_hits_union <- unique(c((day10_scr1$Diff_lethality %>% 
+                                   dplyr::filter(neg.fdr < 0.1 & 
+                                                   id %in% day10_scr1$LIMD1_essential_union))$id,
+                     (day17_scr1$Diff_lethality %>% 
+                        dplyr::filter(neg.fdr < 0.1 &
+                                        id %in% day17_scr1$LIMD1_essential_union))$id,
+                     (day11_scr2$Diff_lethality %>% 
+                        dplyr::filter(neg.fdr < 0.1 & 
+                                        id %in% day11_scr2$LIMD1_essential_union))$id,
+                     (day21_scr2$Diff_lethality %>% 
+                        dplyr::filter(neg.fdr < 0.1 & 
+                                        id %in% day21_scr2$LIMD1_essential_union))$id))
+
+```
+
+One additional hit: **TRIM37**.
+
+## Depleted in LIMD1-/-
+
+Defined as:
+
+1. An FDR < 0.1 in LIMD1-/- vs Parental Mageck comparison for negative fold-change cases.
+
+```{r}
+depleted_hits_union <- unique(c((day10_scr1$Diff_lethality %>% 
+                                   dplyr::filter(neg.fdr < 0.1))$id,
+                     (day17_scr1$Diff_lethality %>% 
+                        dplyr::filter(neg.fdr < 0.1))$id,
+                     (day11_scr2$Diff_lethality %>% 
+                        dplyr::filter(neg.fdr < 0.1))$id,
+                     (day21_scr2$Diff_lethality %>% 
+                        dplyr::filter(neg.fdr < 0.1))$id))
+
+```
+
+![](../images/depleted-string.png)
+
+![](../images/depleted-enriched.png)
+
+## Loss of essentiality in LIMD1-/-
+
+Defined as:
+
+1. Called as essential in Parental (Bagel or Mageck) and **not** called as essential in LIMD1-/- (Bagel or Mageck).
+2. An FDR < 0.1 in LIMD1-/- vs Parental Mageck comparison for positive fold-change cases.
 
 ```{r}
 loss_hits_union <- unique(c((day10_scr1$Diff_lethality %>% dplyr::filter(typeU == "Loss-Ess_LIMD1"))$id,
@@ -242,11 +297,33 @@ loss_hits_union <- unique(c((day10_scr1$Diff_lethality %>% dplyr::filter(typeU =
 
 ```
 
-Very strong enrichment for mitochondrial oxidative phosphorylation.
+Very strong enrichment for **mitochondrial oxidative phosphorylation**.
 
 ![](../images/string-fgc_0014-loss.png)
 
 ![](../images/string-fgc_0014-loss-enrichments.png)
+
+## Saving hits
+
+```{r}
+depleted_hits <- data.frame(gene = unique(c(gain_hits_union, depleted_ess_hits_union, depleted_hits_union)), 
+                            stringsAsFactors = F) %>%
+  dplyr::mutate(Gain_lethality_LIMD1 = as.integer(gene %in% gain_hits_union),
+                Depleted_and_lethal_LIMD1 = as.integer(gene %in% depleted_ess_hits_union),
+                Depleted_LIMD1 = as.integer(gene %in% depleted_hits_union))
+
+out_file <- "../data/fgc_0014--depleted-hits.csv"
+write.csv(depleted_hits, file = out_file, quote=F, col.names = F, row.names = F)
+
+cat(paste("depleted hits written to:",out_file))
+
+out_file <- "../data/fgc_0014--loss-lethality-hits.csv"
+cat(loss_hits_union, file = out_file, sep = "\n")
+
+cat(paste("loss-of-lethality hits written to:",out_file))
+
+```
+
 
 # QC
 
