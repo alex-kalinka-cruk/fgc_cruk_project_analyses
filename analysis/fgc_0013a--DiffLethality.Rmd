@@ -1,0 +1,268 @@
+---
+title: 'FGC_0013a: HeLa (ARH3-/- and HPF1-/-) and U2OS (ARH3-/-) synthetic lethality screens'
+author: "Alex Kalinka"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    depth: 3
+    highlight: tango
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+---
+
+# Setup
+
+```{r}
+options(warn=-1)
+
+suppressMessages(library(knitr))
+suppressMessages(library(magrittr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(dplyr))
+suppressMessages(library(crispRutils))
+
+base_path <- "~/data/az_cruk/fgc_0013a"
+
+```
+
+# ARH3 -/-
+
+## HeLa
+
+### Day 7
+
+```{r}
+hela.arh3_day7 <- crispRutils::run_synth_lethal_analysis(file.path(base_path, "HeLa-DiffLeth-parental-ARH3-day7"))
+
+plot(hela.arh3_day7, type = "plasmid", remove_multimappers = T, 
+     library_name = "yusa_v3_human", library_type = "n", library_annotation_version = 1)
+
+plot(hela.arh3_day7, type = "treat", remove_multimappers = T, 
+     library_name = "yusa_v3_human", library_type = "n", library_annotation_version = 1)
+
+```
+
+### Day 17
+
+```{r}
+hela.arh3_day17 <- crispRutils::run_synth_lethal_analysis(file.path(base_path, "HeLa-DiffLeth-parental-ARH3-day17"))
+
+plot(hela.arh3_day17, type = "plasmid", remove_multimappers = T, 
+     library_name = "yusa_v3_human", library_type = "n", library_annotation_version = 1)
+
+plot(hela.arh3_day17, type = "treat", remove_multimappers = T, 
+     library_name = "yusa_v3_human", library_type = "n", library_annotation_version = 1)
+
+```
+
+## U2OS
+
+### Day 9
+
+```{r}
+u2os.arh3_day9 <- crispRutils::run_synth_lethal_analysis(file.path(base_path, "U2OS-DiffLeth-parental-ARH3-day9"))
+
+plot(u2os.arh3_day9, type = "plasmid", remove_multimappers = T, 
+     library_name = "yusa_v3_human", library_type = "n", library_annotation_version = 1)
+
+plot(u2os.arh3_day9, type = "treat", remove_multimappers = T, 
+     library_name = "yusa_v3_human", library_type = "n", library_annotation_version = 1)
+
+```
+
+### Day 16
+
+```{r}
+u2os.arh3_day16 <- crispRutils::run_synth_lethal_analysis(file.path(base_path, "U2OS-DiffLeth-parental-ARH3-day16"))
+
+plot(u2os.arh3_day16, type = "plasmid", remove_multimappers = T, 
+     library_name = "yusa_v3_human", library_type = "n", library_annotation_version = 1)
+
+plot(u2os.arh3_day16, type = "treat", remove_multimappers = T, 
+     library_name = "yusa_v3_human", library_type = "n", library_annotation_version = 1)
+
+```
+
+# HPF1 -/-
+
+## HeLa
+
+### Day 17
+
+```{r}
+hela.hpf1_day17 <- crispRutils::run_synth_lethal_analysis(file.path(base_path, "HeLa-DiffLeth-parental-HPF1-day17"))
+
+plot(hela.hpf1_day17, type = "plasmid", remove_multimappers = T, 
+     library_name = "yusa_v3_human", library_type = "n", library_annotation_version = 1)
+
+plot(hela.hpf1_day17, type = "treat", remove_multimappers = T, 
+     library_name = "yusa_v3_human", library_type = "n", library_annotation_version = 1)
+
+```
+
+# Hits
+
+There are 93 genes in common between HeLa ARH3-/- and HeLa HPF1-/- Gain-Ess hits:
+
+```{r}
+hits.hela.hpf1_day17 <- (hela.hpf1_day17$mageck_treat_vs_ctrl_ess_annot %>% filter(type=="Gain-Ess"))$id
+hits.hela.arh3_day17 <- (hela.arh3_day17$mageck_treat_vs_ctrl_ess_annot %>% filter(type=="Gain-Ess"))$id
+length(intersect(hits.hela.hpf1_day17, hits.hela.arh3_day17))
+
+```
+
+
+# QC
+
+## HeLa ARH3 Day 7
+
+```{r}
+qc.hela.arh3_day7 <- readRDS(file.path(base_path,"HeLa-DiffLeth-parental-ARH3-day7/qc/QC_fgc.rds"))
+
+crispRutils::annotate_gene_sets_lfc_grna(qc.hela.arh3_day7) %>%
+  plot()
+
+crispRutils::plot_perf_curves_fgcQC(qc.hela.arh3_day7, "PrRc")
+
+```
+
+## HeLa ARH3 Day 17
+
+```{r}
+qc.hela.arh3_day17 <- readRDS(file.path(base_path,"HeLa-DiffLeth-parental-ARH3-day17/qc/QC_fgc.rds"))
+
+crispRutils::annotate_gene_sets_lfc_grna(qc.hela.arh3_day17) %>%
+  plot()
+
+crispRutils::plot_perf_curves_fgcQC(qc.hela.arh3_day17, "PrRc")
+
+qc.arh3_hpf1_bl <- readRDS(file.path(base_path,"HeLa-ARH3-baseline-lethality/qc/QC_fgc.rds"))
+
+```
+
+## HeLa HPF1 Day 17
+
+```{r}
+qc.hela.hpf1_day17 <- readRDS(file.path(base_path,"HeLa-DiffLeth-parental-HPF1-day17/qc/QC_fgc.rds"))
+
+crispRutils::annotate_gene_sets_lfc_grna(qc.hela.hpf1_day17) %>%
+  plot()
+
+crispRutils::plot_perf_curves_fgcQC(qc.hela.hpf1_day17, "PrRc")
+
+qc.hela_hpf1_bl <- readRDS(file.path(base_path,"HeLa-HPF1-baseline-lethality/qc/QC_fgc.rds"))
+
+```
+
+
+## U2OS ARH3 Day 9
+
+```{r}
+qc.u2os.arh3_day9 <- readRDS(file.path(base_path,"U2OS-DiffLeth-parental-ARH3-day9/qc/QC_fgc.rds"))
+
+crispRutils::annotate_gene_sets_lfc_grna(qc.u2os.arh3_day9) %>%
+  plot()
+
+crispRutils::plot_perf_curves_fgcQC(qc.u2os.arh3_day9, "PrRc")
+
+```
+
+## U2OS ARH3 Day 16
+
+```{r}
+qc.u2os.arh3_day16 <- readRDS(file.path(base_path,"U2OS-DiffLeth-parental-ARH3-day16/qc/QC_fgc.rds"))
+
+crispRutils::annotate_gene_sets_lfc_grna(qc.u2os.arh3_day16) %>%
+  plot()
+
+crispRutils::plot_perf_curves_fgcQC(qc.u2os.arh3_day16, "PrRc")
+
+```
+
+## Sample checks
+
+```{r}
+# All sample-vs-plasmid log2FC.
+add_lfc_plasmid <- function(data){
+  cols <- colnames(data[,grep("^FGC",colnames(data))])
+  for(samp in cols){
+    col <- sym(paste("lfc_",samp,sep=""))
+    data %<>%
+      mutate(!!col := log2(!!sym(samp)+5) - log2(plasmid+5))
+  }
+  data %<>%
+    select(sgRNA, starts_with("lfc_"))
+  return(data)
+}
+
+lfc_baseline_control <- qc.hela.arh3_day17$log2FC$control_vs_plasmid.gRNA %>%
+  dplyr::inner_join(qc.hela_hpf1_bl$log2FC$control_vs_plasmid.gRNA,by="sgRNA") %>%
+  dplyr::mutate(log2fc_FGC_0013_01_01_06 = log2(FGC_0013_01_01_06+5)-log2(Yusa_v3_KO_Plasmid_FGC_batch_1.x+5),
+         log2fc_FGC_0013_01_03_01 = log2(FGC_0013_01_03_01+5)-log2(Yusa_v3_KO_Plasmid_FGC_batch_1.x+5),
+         log2fc_FGC_0013_01_01_05 = log2(FGC_0013_01_01_05+5)-log2(Yusa_v3_KO_Plasmid_FGC_batch_1.x+5),
+         log2fc_FGC_0013_01_03_02 = log2(FGC_0013_01_03_02+5)-log2(Yusa_v3_KO_Plasmid_FGC_batch_1.x+5))
+
+ggpairs(lfc_baseline_control %>%
+          select(log2fc_FGC_0013_01_01_05, log2fc_FGC_0013_01_01_06,
+                 log2fc_FGC_0013_01_03_01, log2fc_FGC_0013_01_03_02))
+
+lfc_controls <- qc.hela.arh3_day7$log2FC$control_vs_plasmid.gRNA %>%
+  dplyr::rename(plasmid = Yusa_v3_KO_Plasmid_FGC_batch_1) %>%
+  mutate(FGC_0013_01_03_01 = qc.hela_hpf1_bl$log2FC$control_vs_plasmid.gRNA$FGC_0013_01_03_01[match(sgRNA,qc.hela_hpf1_bl$log2FC$control_vs_plasmid.gRNA$sgRNA)]) %>%
+  dplyr::inner_join(qc.hela.arh3_day7$log2FC$treatment_vs_plasmid.gRNA,by="sgRNA") %>%
+  dplyr::inner_join(qc.hela.arh3_day17$log2FC$control_vs_plasmid.gRNA,by="sgRNA") %>%
+  dplyr::inner_join(qc.hela.arh3_day17$log2FC$treatment_vs_plasmid.gRNA,by="sgRNA") %>%
+  dplyr::inner_join(qc.hela.hpf1_day17$log2FC$control_vs_plasmid.gRNA,by="sgRNA") %>%
+  dplyr::inner_join(qc.hela.hpf1_day17$log2FC$treatment_vs_plasmid.gRNA,by="sgRNA") %>%
+  dplyr::inner_join(qc.u2os.arh3_day9$log2FC$control_vs_plasmid.gRNA,by="sgRNA") %>%
+  dplyr::inner_join(qc.u2os.arh3_day9$log2FC$treatment_vs_plasmid.gRNA,by="sgRNA") %>%
+  dplyr::inner_join(qc.u2os.arh3_day16$log2FC$control_vs_plasmid.gRNA,by="sgRNA") %>%
+  dplyr::inner_join(qc.u2os.arh3_day16$log2FC$treatment_vs_plasmid.gRNA,by="sgRNA") %>%
+  select(sgRNA, plasmid, starts_with("FGC_0013_"), -ends_with(".x.x"), -ends_with(".y")) %>%
+  add_lfc_plasmid()
+
+cor.ctrl <- cor(lfc_controls %>%
+                  select(-sgRNA) %>%
+                  filter(!across(everything(), is.infinite)) %>%
+                  as.matrix(), use = "pairwise.complete.obs")
+
+ggcorrplot(cor.ctrl, hc.order = TRUE, type = "lower",outline.col = "white", show.diag=T) +
+  scale_fill_gradient2(limit = c(0,1), low = "blue", high =  "red", mid = "white", midpoint = 0.4)
+
+cor.ctrl.focus <- cor.ctrl %>%
+  as.data.frame() %>%
+  select(lfc_FGC_0013_01_03_01) %>%
+  mutate(control_sample = rownames(.)) %>%
+  filter(!control_sample %in% c("lfc_FGC_0013_01_03_01","lfc_FGC_0013_01_03_01.x")) %>%
+  mutate(control_sample = gsub("^lfc_(.*?)\\.x$","\\1",control_sample))
+
+cor.ctrl.focus %>%
+  ggplot(aes(control_sample, lfc_FGC_0013_01_03_01, fill = control_sample)) +
+  geom_bar(stat="identity") +
+  #ylim(0.4,0.67) +
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank()) +
+  ggtitle("Correlation of FGC_0013_01_03_01 with control samples")
+
+
+#### baselines
+
+lfc_baseline <- qc.arh3_hpf1_bl$log2FC$control_vs_plasmid.gRNA %>%
+  dplyr::rename(plasmid = Yusa_v3_KO_Plasmid_FGC_batch_1) %>%
+  dplyr::inner_join(qc.hela_hpf1_bl$log2FC$control_vs_plasmid.gRNA,by="sgRNA") %>%
+  add_lfc_plasmid()
+
+cor.bl <- cor(lfc_baseline %>%
+                  select(-sgRNA) %>%
+                  filter(!across(everything(), is.infinite)) %>%
+                  as.matrix(), use = "pairwise.complete.obs")
+
+ggcorrplot(cor.bl, hc.order = TRUE, type = "lower",outline.col = "white", show.diag=T) +
+  scale_fill_gradient2(limit = c(0,1), low = "blue", high =  "red", mid = "white", midpoint = 0.4)
+
+```
+
+
+
