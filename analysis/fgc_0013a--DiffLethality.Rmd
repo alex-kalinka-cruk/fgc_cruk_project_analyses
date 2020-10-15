@@ -21,6 +21,7 @@ options(warn=-1)
 suppressMessages(library(knitr))
 suppressMessages(library(magrittr))
 suppressMessages(library(ggplot2))
+suppressMessages(library(GGally))
 suppressMessages(library(dplyr))
 suppressMessages(library(crispRutils))
 
@@ -105,7 +106,6 @@ plot(hela.hpf1_day17, type = "treat", remove_multimappers = T,
 
 # Hits
 
-There are 93 genes in common between HeLa ARH3-/- and HeLa HPF1-/- Gain-Ess hits:
 
 ```{r}
 hits.hela.hpf1_day17 <- (hela.hpf1_day17$mageck_treat_vs_ctrl_ess_annot %>% filter(type=="Gain-Ess"))$id
@@ -184,7 +184,7 @@ crispRutils::plot_perf_curves_fgcQC(qc.u2os.arh3_day16, "PrRc")
 
 ## Sample checks
 
-```{r}
+```{r,eval=F}
 # All sample-vs-plasmid log2FC.
 add_lfc_plasmid <- function(data){
   cols <- colnames(data[,grep("^FGC",colnames(data))])
