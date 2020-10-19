@@ -25,7 +25,18 @@ suppressMessages(library(GGally))
 suppressMessages(library(dplyr))
 suppressMessages(library(crispRutils))
 
-base_path <- "~/data/az_cruk/fgc_0013a"
+base_path <- "~/data/az_cruk/fgc_0013a--old"
+
+all<-rbind(sw %>% 
+             filter(id %in% c("PARP1","PARP2")) %>%
+             mutate(analysis = "swap"),
+           dr %>% 
+             filter(id %in% c("PARP1","PARP2")) %>%
+             mutate(analysis = "dropped"),
+           or %>% 
+             filter(id %in% c("PARP1","PARP2")) %>%
+             mutate(analysis = "original")) %>%
+  dplyr::select(analysis,id,neg.score,neg.p.value,neg.fdr,neg.lfc)
 
 ```
 
