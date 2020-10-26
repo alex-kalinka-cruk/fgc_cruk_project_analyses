@@ -1,0 +1,97 @@
+---
+title: 'FGC_0014: A-549 LIMD1-/- synthetic lethality'
+author: "Alex Kalinka"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    depth: 3
+    highlight: tango
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+---
+
+# Setup
+
+```{r}
+options(warn=-1)
+
+suppressMessages(library(knitr))
+suppressMessages(library(magrittr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(dplyr))
+suppressMessages(library(crispRutils))
+
+base_path <- "~/data/az_cruk/fgc_0014-DiffLethality"
+
+dleth.hits <- read.csv("../data/fgc_0014--depleted-hits.csv", stringsAsFactors = F)
+c5 <- read.csv("../data/tyson_sharp_rnaseq/cas9-veh-vs-c5-veh.csv", stringsAsFactors = F)
+c10 <- read.csv("../data/tyson_sharp_rnaseq/cas9-veh-vs-c10-veh.csv", stringsAsFactors = F)
+saec <- read.csv("../data/tyson_sharp_rnaseq/cas9-SAEC-vs-LIMD1-SAEC.csv", stringsAsFactors = F)
+
+par_limd1.c5 <- read.table(file.path(base_path,"A549-DiffLeth-parental-LIMD1-day11-scrn-2/mageck/Treatment_vs_Control.gene_summary.txt"),
+                        stringsAsFactors = F,header=T) %>%
+  left_join(c5, by = c("id" = "Gene.symbol"))
+
+par_limd1.c10 <- read.table(file.path(base_path,"A549-DiffLeth-parental-LIMD1-day11-scrn-2/mageck/Treatment_vs_Control.gene_summary.txt"),
+                        stringsAsFactors = F,header=T) %>%
+  left_join(c10, by = c("id" = "Gene.symbol"))
+
+```
+
+```{r}
+# Function library.
+annotate_hits <- function(data){
+  data %<>%
+    mutate(hit_type = case_when(Gene.symbol %in% dleth.hits$gene[dleth.hits$Gain_lethality_LIMD1==1] ~ "New.Ess",
+                                Gene.symbol %in% dleth.hits$gene[dleth.hits$Depleted_LIMD1==1] ~ "Depleted",
+                                TRUE ~ "Not_hit"),
+           hit_type = factor(hit_type, levels = c("Not_hit","Depleted","New.Ess")))
+  return(data)
+}
+
+c5 <- annotate_hits(c5)
+
+c5 %>%
+  ggplot(aes(hit_type,log2(Ratio..A549.Cas9.Veh.vs..A549.LIMD1KO.C5.Veh.),color=hit_type)) +
+  geom_point() +
+  geom_boxplot() +
+  ylim(-1,1)
+
+c10 <- annotate_hits(c10)
+
+c10 %>%
+  ggplot(aes(hit_type,LSMean.A549.Cas9.Veh...A549.Cas9.Veh.vs..A549.LIMD1KO.C10.Veh.,color=hit_type)) +
+  geom_point() +
+  geom_boxplot() +
+  ylim(0,200)
+
+saec <- annotate_hits(saec)
+
+saec %>%
+  ggplot(aes(hit_type,abs(Fold.change..SAEC.Cas9.C2.vs..SAEC.LIMD1KO.C11.),color=hit_type)) +
+  geom_point() +
+  geom_boxplot() +
+  ylim(0,2)
+
+
+```
+
+# Plots for JMC
+
+```{r}
+day17_scr1 <- crispRutils::run_synth_lethal_analysis(file.path(base_path, "A549-DiffLeth-parental-LIMD1-day17-scrn-1"))
+
+plot(day17_scr1, type = "plasmid", remove_multimappers = T, label_hits = F,
+     library_name = "yusa_v3_human", library_type = "n", library_annotation_version = 1)
+
+plot(day17_scr1, type = "treat", remove_multimappers = T, label_hits = F,
+     library_name = "yusa_v3_human", library_type = "n", library_annotation_version = 1)
+
+```
+
+
+
+
