@@ -60,6 +60,12 @@ c5 %>%
   geom_boxplot() +
   ylim(-1,1)
 
+c5 %>%
+  ggplot(aes(hit_type,LSMean.A549.Cas9.Veh...A549.Cas9.Veh.vs..A549.LIMD1KO.C5.Veh.,color=hit_type)) +
+  geom_point() +
+  geom_boxplot() +
+  ylim(0,100)
+
 c10 <- annotate_hits(c10)
 
 c10 %>%
@@ -76,6 +82,18 @@ saec %>%
   geom_boxplot() +
   ylim(0,2)
 
+par_limd1.c5 %>%
+  ggplot(aes(neg.lfc, LSMean.A549.Cas9.Veh...A549.Cas9.Veh.vs..A549.LIMD1KO.C5.Veh.)) +
+  geom_bin2d() +
+  geom_smooth() +
+  ylim(0,100) +
+  ggtitle("C5 LSMean vs CRISPR KO-WT log fold change")
+
+par_limd1.c5 %>%
+  ggplot(aes(neg.lfc, log2(Ratio..A549.Cas9.Veh.vs..A549.LIMD1KO.C5.Veh.))) +
+  geom_bin2d() +
+  geom_smooth() +
+  ggtitle("C5 RNAseq logFC vs CRISPR KO-WT logFC")
 
 ```
 
@@ -91,7 +109,5 @@ plot(day17_scr1, type = "treat", remove_multimappers = T, label_hits = F,
      library_name = "yusa_v3_human", library_type = "n", library_annotation_version = 1)
 
 ```
-
-
 
 
