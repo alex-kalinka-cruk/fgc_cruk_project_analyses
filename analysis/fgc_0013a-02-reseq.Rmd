@@ -48,6 +48,19 @@ plot(hela.arh3_day17, type = "treat", remove_multimappers = T,
 
 ## U2OS
 
+### Day 9 - original
+
+```{r}
+u2os.arh3_day9.orig <- crispRutils::run_synth_lethal_analysis(file.path(base_path.orig, "U2OS-DiffLeth-parental-ARH3-day9"))
+
+plot(u2os.arh3_day9.orig, type = "plasmid", remove_multimappers = T, 
+     library_name = "yusa_v3_human", library_type = "n", library_annotation_version = 1)
+
+plot(u2os.arh3_day9.orig, type = "treat", remove_multimappers = T, 
+     library_name = "yusa_v3_human", library_type = "n", library_annotation_version = 1)
+
+```
+
 ### Day 16
 
 ```{r}
@@ -78,6 +91,7 @@ plot(hela.hpf1_day17, type = "treat", remove_multimappers = T,
 
 ```
 
+
 # Shared Depletion Hits
 
 ## HeLa ARH3-/-
@@ -89,22 +103,20 @@ desir.hela_arh3.day17 <- read_desirability_scores(file.path(base_path,"HeLa-Diff
 desir.hela_arh3.day7.orig <- read_desirability_scores(file.path(base_path.orig,"HeLa-DiffLeth-parental-ARH3-day7"))
 hela.arh3.des <- join_desirability_scores(desir.hela_arh3.day7,
                                           desir.hela_arh3.day17,
-                                          desir.hela_arh3.day17.orig,
+                                          desir.hela_arh3.day7.orig,
                                           names = c("hela_arh3_day7","hela_arh3_day17","hela_arh3_day7.orig"),
                                           type = "neg")
 ```
 
 ```{r, cache=TRUE}
-fdr_thresh.hela_arh3 <- find_desir_threshold_for_FDR(hela.arh3.des, start_desir = 0.9)
-dthresh.hela_arh3 <- (fdr_thresh.hela_arh3 %>%
-                        dplyr::filter(FDR.common < 0.1) %>%
-                        dplyr::filter(FDR.common == max(FDR.common)))$Desir_threshold
+fdr_thresh.hela_arh3 <- find_desir_threshold_for_FDR(hela.arh3.des, start_desir = 0.9, stop_desir = 0.4)
+dthresh.hela_arh3 <- 0.5
 ```
 
 ```{r}
 hits.hela.arh3.des <- (hela.arh3.des %>%
   crispRutils:::.prep_4_mle(dthresh.hela_arh3) %>%
-  dplyr::filter(total == 2))$gene
+  dplyr::filter(total == 3))$gene
 
 ```
 
@@ -115,31 +127,64 @@ hits.hela.arh3.des <- (hela.arh3.des %>%
 ## U2OS ARH3-/-
 
 ```{r}
-# Read Desirability data from day 7 and 17.
-u2os.arh3.des <- join_desirability_scores(read_desirability_scores(file.path(base_path.orig,"U2OS-DiffLeth-parental-ARH3-day9")),
-                                          read_desirability_scores(file.path(base_path,"U2OS-DiffLeth-parental-ARH3-day16")),
+# Read Desirability data from day 9 and 16, both original and re-seq.
+desir.u2os.arh3.day9 <- read_desirability_scores(file.path(base_path,"U2OS-DiffLeth-parental-ARH3-day9"))
+desir.u2os.arh3.day16 <- read_desirability_scores(file.path(base_path,"U2OS-DiffLeth-parental-ARH3-day16"))
+desir.u2os.arh3.day9.orig <- read_desirability_scores(file.path(base_path.orig,"U2OS-DiffLeth-parental-ARH3-day9"))
+desir.u2os.arh3.day16.orig <- read_desirability_scores(file.path(base_path.orig,"U2OS-DiffLeth-parental-ARH3-day16"))
+u2os.arh3.des <- join_desirability_scores(desir.u2os.arh3.day9,
+                                          desir.u2os.arh3.day16,
+                                          desir.u2os.arh3.day9.orig,
+                                          desir.u2os.arh3.day16.orig,
                                           names = c("u2os_arh3_day9","u2os_arh3_day16"),
                                           type = "neg")
 ```
 
 ```{r, cache=TRUE}
-fdr_thresh.u2os_arh3 <- find_desir_threshold_for_FDR(u2os.arh3.des, start_desir = 0.9, stop_desir = 0.4)
-dthresh.u2os_arh3 <- (fdr_thresh.u2os_arh3 %>%
-                        dplyr::filter(FDR.common < 0.05) %>%
-                        dplyr::filter(FDR.common == max(FDR.common)))$Desir_threshold
+fdr_thresh.u2os_arh3 <- find_desir_threshold_for_FDR(u2os.arh3.des, start_desir = 0.9, stop_desir = 0.5)
+dthresh.u2os_arh3 <- 0.5
 ```
 
 ```{r}
 hits.u2os.arh3.des <- (u2os.arh3.des %>%
   crispRutils:::.prep_4_mle(dthresh.u2os_arh3) %>%
-  dplyr::filter(total == 2))$gene
+  dplyr::filter(total == 3))$gene
 
 ```
 
 ![](../images/string-fgc_0013a-depleted-u2os-arh3.png)
 
-![](../images/string-fgc_0013a-depleted-u2os-arh3-paper.png)
+![](../images/string-fgc_0013a-depleted-u2os-arh3-bio.png)
 
+![](../images/string-fgc_0013a-depleted-u2os-arh3-kegg.png)
+
+## HeLa HPF1-/-
+
+```{r}
+# Read Desirability data from day 7 and 17 (re-seq) and day 17 (original).
+desir.hela_hpf1.day17.orig <- read_desirability_scores(file.path(base_path.orig,"HeLa-DiffLeth-parental-HPF1-day17"))
+desir.hela_hpf1.day17 <- read_desirability_scores(file.path(base_path,"HeLa-DiffLeth-parental-HPF1-day17"))
+hela.hpf1.des <- join_desirability_scores(desir.hela_hpf1.day17.orig,
+                                          desir.hela_hpf1.day17,
+                                          names = c("hela_hpf1_day17.orig","hela_hpf1_day17"),
+                                          type = "neg")
+```
+
+```{r, cache=TRUE}
+fdr_thresh.hela_hpf1 <- find_desir_threshold_for_FDR(hela.hpf1.des, start_desir = 0.9, stop_desir = 0.5)
+dthresh.hela_hpf1 <- 0.9
+```
+
+```{r}
+hits.hela.hpf1.des <- (hela.hpf1.des %>%
+  crispRutils:::.prep_4_mle(dthresh.hela_hpf1) %>%
+  dplyr::filter(total == 2))$gene
+
+```
+
+![](../images/string-fgc_0013a-depleted-hela-hpf1.png)
+
+![](../images/string-fgc_0013a-depleted-hela-hpf1-CC.png)
 
 # QC
 
