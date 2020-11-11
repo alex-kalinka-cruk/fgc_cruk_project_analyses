@@ -83,12 +83,14 @@ plot(hela.hpf1_day17, type = "treat", remove_multimappers = T,
 ## HeLa ARH3-/-
 
 ```{r}
-# Read Desirability data from day 7 and 17.
+# Read Desirability data from day 7 and 17 (re-seq) and day 17 (original).
 desir.hela_arh3.day7 <- read_desirability_scores(file.path(base_path.orig,"HeLa-DiffLeth-parental-ARH3-day7"))
 desir.hela_arh3.day17 <- read_desirability_scores(file.path(base_path,"HeLa-DiffLeth-parental-ARH3-day17"))
+desir.hela_arh3.day7.orig <- read_desirability_scores(file.path(base_path.orig,"HeLa-DiffLeth-parental-ARH3-day7"))
 hela.arh3.des <- join_desirability_scores(desir.hela_arh3.day7,
                                           desir.hela_arh3.day17,
-                                          names = c("hela_arh3_day7","hela_arh3_day17"),
+                                          desir.hela_arh3.day17.orig,
+                                          names = c("hela_arh3_day7","hela_arh3_day17","hela_arh3_day7.orig"),
                                           type = "neg")
 ```
 
