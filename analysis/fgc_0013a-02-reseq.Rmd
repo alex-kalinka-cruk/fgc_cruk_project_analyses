@@ -27,6 +27,10 @@ suppressMessages(library(crispRutils))
 base_path <- "~/data/az_cruk/fgc_0013a--02-reseq"
 base_path.orig <- "~/data/az_cruk/fgc_0013a--old"
 
+# Pre-computed hits (slow to process from scratch).
+hits.hela.arh3.des <- readRDS(file="../data/hits.hela.arh3.des.rds")
+hits.u2os.arh3.des <- readRDS(file="../data/hits.u2os.arh3.des.rds")
+
 ```
 
 # ARH3 -/-
@@ -50,6 +54,10 @@ plot(hela.arh3_day17, type = "treat", remove_multimappers = T,
 
 ### Day 9 - original
 
+At day 9, **RNF4** is the sole synthetic lethal: a transcription factor with a role in the [DNA-ds-break response](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5391139/).
+
+There are 4 genes that have lost essentiality in the U2OS ARH3-/- KO cell line and they are weakly enriched for 'mitochondrial respiratory chain complex I assembly'
+
 ```{r}
 u2os.arh3_day9.orig <- crispRutils::run_synth_lethal_analysis(file.path(base_path.orig, "U2OS-DiffLeth-parental-ARH3-day9"))
 
@@ -59,9 +67,20 @@ plot(u2os.arh3_day9.orig, type = "plasmid", remove_multimappers = T,
 plot(u2os.arh3_day9.orig, type = "treat", remove_multimappers = T, 
      library_name = "yusa_v3_human", library_type = "n", library_annotation_version = 1)
 
+u2os.day9.lost_ess <- u2os.arh3_day9.orig$mageck_treat_vs_ctrl_ess_annot %>%
+  dplyr::filter(type == "Loss-Ess")
+
 ```
 
+![](../images/string-fgc_0013a-lost-ess-u2os-arh3-day9.png)
+
+![](../images/string-fgc_0013a-lost-ess-u2os-arh3-day9-BP.png)
+
 ### Day 16
+
+At day 16, **BIRC2** is the sole synthetic lethal gene: an [inhibitor of apoptosis](https://en.wikipedia.org/wiki/Baculoviral_IAP_repeat-containing_protein_2).
+
+There are 5 genes that have lost essentiality in the U2OS ARH3-/- KO cell line and they are strongly enriched for 'mitochondrial respiratory chain complex I assembly'.
 
 ```{r}
 u2os.arh3_day16 <- crispRutils::run_synth_lethal_analysis(file.path(base_path, "U2OS-DiffLeth-parental-ARH3-day16"))
@@ -72,13 +91,22 @@ plot(u2os.arh3_day16, type = "plasmid", remove_multimappers = T,
 plot(u2os.arh3_day16, type = "treat", remove_multimappers = T, 
      library_name = "yusa_v3_human", library_type = "n", library_annotation_version = 1)
 
+u2os.day16.lost_ess <- u2os.arh3_day16$mageck_treat_vs_ctrl_ess_annot %>%
+  dplyr::filter(type == "Loss-Ess")
+
 ```
+
+![](../images/string-fgc_0013a-lost-ess-u2os-arh3.png)
+
+![](../images/string-fgc_0013a-lost-ess-u2os-arh3-BP.png)
 
 # HPF1 -/-
 
 ## HeLa
 
 ### Day 17
+
+There are no synthetic lethal hits, but there are 6 genes that have lost essentiality in the HeLa HPF1-/- cell line. They are enriched for 'folic acid metabolic process'.
 
 ```{r}
 hela.hpf1_day17 <- crispRutils::run_synth_lethal_analysis(file.path(base_path, "HeLa-DiffLeth-parental-HPF1-day17"))
@@ -89,8 +117,15 @@ plot(hela.hpf1_day17, type = "plasmid", remove_multimappers = T,
 plot(hela.hpf1_day17, type = "treat", remove_multimappers = T, 
      library_name = "yusa_v3_human", library_type = "n", library_annotation_version = 1)
 
+hela.hpf1.day17.lost_ess <- hela.hpf1_day17$mageck_treat_vs_ctrl_ess_annot %>%
+  dplyr::filter(type == "Loss-Ess")
+
 ```
 
+![](../images/string-fgc_0013a-lost-ess-hela-hpf1.png)
+
+![](../images/string-fgc_0013a-lost-ess-hela-hpf1-BP.png)
+![](../images/string-fgc_0013a-lost-ess-hela-hpf1-Pub.png)
 
 # Shared Depletion Hits
 
@@ -108,12 +143,12 @@ hela.arh3.des <- join_desirability_scores(desir.hela_arh3.day7,
                                           type = "neg")
 ```
 
-```{r, cache=TRUE}
+```{r, eval=FALSE}
 fdr_thresh.hela_arh3 <- find_desir_threshold_for_FDR(hela.arh3.des, start_desir = 0.9, stop_desir = 0.4)
-dthresh.hela_arh3 <- 0.5
 ```
 
 ```{r}
+dthresh.hela_arh3 <- 0.5
 hits.hela.arh3.des <- (hela.arh3.des %>%
   crispRutils:::.prep_4_mle(dthresh.hela_arh3) %>%
   dplyr::filter(total == 3))$gene
@@ -140,7 +175,7 @@ u2os.arh3.des <- join_desirability_scores(desir.u2os.arh3.day9,
                                           type = "neg")
 ```
 
-```{r, cache=TRUE}
+```{r, eval=FALSE}
 fdr_thresh.u2os_arh3 <- find_desir_threshold_for_FDR(u2os.arh3.des, start_desir = 0.9, stop_desir = 0.5)
 dthresh.u2os_arh3 <- 0.5
 ```
