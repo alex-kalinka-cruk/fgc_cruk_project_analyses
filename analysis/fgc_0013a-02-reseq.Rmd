@@ -145,9 +145,7 @@ hela.arh3.des <- join_desirability_scores(desir.hela_arh3.day7,
 
 ```{r, eval=FALSE}
 fdr_thresh.hela_arh3 <- find_desir_threshold_for_FDR(hela.arh3.des, start_desir = 0.9, stop_desir = 0.4)
-```
 
-```{r}
 dthresh.hela_arh3 <- 0.5
 hits.hela.arh3.des <- (hela.arh3.des %>%
   crispRutils:::.prep_4_mle(dthresh.hela_arh3) %>%
@@ -163,24 +161,20 @@ hits.hela.arh3.des <- (hela.arh3.des %>%
 
 ```{r}
 # Read Desirability data from day 9 and 16, both original and re-seq.
-desir.u2os.arh3.day9 <- read_desirability_scores(file.path(base_path,"U2OS-DiffLeth-parental-ARH3-day9"))
 desir.u2os.arh3.day16 <- read_desirability_scores(file.path(base_path,"U2OS-DiffLeth-parental-ARH3-day16"))
 desir.u2os.arh3.day9.orig <- read_desirability_scores(file.path(base_path.orig,"U2OS-DiffLeth-parental-ARH3-day9"))
 desir.u2os.arh3.day16.orig <- read_desirability_scores(file.path(base_path.orig,"U2OS-DiffLeth-parental-ARH3-day16"))
-u2os.arh3.des <- join_desirability_scores(desir.u2os.arh3.day9,
-                                          desir.u2os.arh3.day16,
+u2os.arh3.des <- join_desirability_scores(desir.u2os.arh3.day16,
                                           desir.u2os.arh3.day9.orig,
                                           desir.u2os.arh3.day16.orig,
-                                          names = c("u2os_arh3_day9","u2os_arh3_day16"),
+                                          names = c("u2os_arh3_day16","u2os_arh3_day9.orig","u2os_arh3_day16.orig"),
                                           type = "neg")
 ```
 
 ```{r, eval=FALSE}
 fdr_thresh.u2os_arh3 <- find_desir_threshold_for_FDR(u2os.arh3.des, start_desir = 0.9, stop_desir = 0.5)
-dthresh.u2os_arh3 <- 0.5
-```
 
-```{r}
+dthresh.u2os_arh3 <- 0.5
 hits.u2os.arh3.des <- (u2os.arh3.des %>%
   crispRutils:::.prep_4_mle(dthresh.u2os_arh3) %>%
   dplyr::filter(total == 3))$gene
@@ -208,9 +202,7 @@ hela.hpf1.des <- join_desirability_scores(desir.hela_hpf1.day17.orig,
 ```{r, cache=TRUE}
 fdr_thresh.hela_hpf1 <- find_desir_threshold_for_FDR(hela.hpf1.des, start_desir = 0.9, stop_desir = 0.5)
 dthresh.hela_hpf1 <- 0.9
-```
 
-```{r}
 hits.hela.hpf1.des <- (hela.hpf1.des %>%
   crispRutils:::.prep_4_mle(dthresh.hela_hpf1) %>%
   dplyr::filter(total == 2))$gene
