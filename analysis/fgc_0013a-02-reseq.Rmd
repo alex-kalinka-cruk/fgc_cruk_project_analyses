@@ -33,11 +33,34 @@ hits.u2os.arh3.des <- readRDS(file="../data/hits.u2os.arh3.des.rds")
 
 ```
 
-# ARH3 -/-
+# Analysis approach
 
-## HeLa
+Two approaches are taken as we have a weak signal in the data:
 
-### Day 17
+1. Synthetic lethality analysis.
+2. Shared depletion analysis.
+
+**Synthetic lethality:**
+Candidate genes are called if they satisfy both of the following criteria:
+
+* Called as essential in the Mutant (Bagel or Mageck) and **not** called as essential in the Wild-Type (Bagel or Mageck).
+* A False Discovery Rate (FDR) < 0.1 in Mutant versus Wild-Type Mageck comparison for negative fold-change cases.
+
+**Shared depletion:**
+For Mutant versus Wild-Type comparisons, candidate genes are called if they are shared across several screens (different time-points and re-sequenced lines) according to a Desirability threshold that corresponds to an FDR of the shared hits that is <10\% (defined using a maximum likelihood approach). These candidates are depleted in the Mutant relative to the Wild-Type and can in principle fall into two groups:
+
+* Weak depletion in Mutant, no depletion in Wild-Type.
+* Depleted in both Mutant and Wild-Type, but more strongly depleted in the Mutant.
+
+# Synthetic lethality analysis
+
+## ARH3 -/-
+
+### HeLa
+
+#### Day 17
+
+No synthetic lethals here.
 
 ```{r}
 hela.arh3_day17 <- crispRutils::run_synth_lethal_analysis(file.path(base_path, "HeLa-DiffLeth-parental-ARH3-day17"))
@@ -50,9 +73,9 @@ plot(hela.arh3_day17, type = "treat", remove_multimappers = T,
 
 ```
 
-## U2OS
+### U2OS
 
-### Day 9 - original
+#### Day 9 - original
 
 At day 9, **RNF4** is the sole synthetic lethal: a transcription factor with a role in the [DNA-ds-break response](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5391139/).
 
@@ -76,7 +99,7 @@ u2os.day9.lost_ess <- u2os.arh3_day9.orig$mageck_treat_vs_ctrl_ess_annot %>%
 
 ![](../images/string-fgc_0013a-lost-ess-u2os-arh3-day9-BP.png)
 
-### Day 16
+#### Day 16
 
 At day 16, **BIRC2** is the sole synthetic lethal gene: an [inhibitor of apoptosis](https://en.wikipedia.org/wiki/Baculoviral_IAP_repeat-containing_protein_2).
 
@@ -100,11 +123,11 @@ u2os.day16.lost_ess <- u2os.arh3_day16$mageck_treat_vs_ctrl_ess_annot %>%
 
 ![](../images/string-fgc_0013a-lost-ess-u2os-arh3-BP.png)
 
-# HPF1 -/-
+## HPF1 -/-
 
-## HeLa
+### HeLa
 
-### Day 17
+#### Day 17
 
 There are no synthetic lethal hits, but there are 6 genes that have lost essentiality in the HeLa HPF1-/- cell line. They are enriched for 'folic acid metabolic process'.
 
@@ -127,19 +150,17 @@ hela.hpf1.day17.lost_ess <- hela.hpf1_day17$mageck_treat_vs_ctrl_ess_annot %>%
 ![](../images/string-fgc_0013a-lost-ess-hela-hpf1-BP.png)
 ![](../images/string-fgc_0013a-lost-ess-hela-hpf1-Pub.png)
 
-# Shared Depletion Hits
+# Shared Depletion analysis
 
 ## HeLa ARH3-/-
 
 ```{r}
 # Read Desirability data from day 7 and 17 (re-seq) and day 17 (original).
-desir.hela_arh3.day7 <- read_desirability_scores(file.path(base_path.orig,"HeLa-DiffLeth-parental-ARH3-day7"))
 desir.hela_arh3.day17 <- read_desirability_scores(file.path(base_path,"HeLa-DiffLeth-parental-ARH3-day17"))
 desir.hela_arh3.day7.orig <- read_desirability_scores(file.path(base_path.orig,"HeLa-DiffLeth-parental-ARH3-day7"))
-hela.arh3.des <- join_desirability_scores(desir.hela_arh3.day7,
-                                          desir.hela_arh3.day17,
+hela.arh3.des <- join_desirability_scores(desir.hela_arh3.day17,
                                           desir.hela_arh3.day7.orig,
-                                          names = c("hela_arh3_day7","hela_arh3_day17","hela_arh3_day7.orig"),
+                                          names = c("hela_arh3_day7.orig","hela_arh3_day17"),
                                           type = "neg")
 ```
 
@@ -149,7 +170,7 @@ fdr_thresh.hela_arh3 <- find_desir_threshold_for_FDR(hela.arh3.des, start_desir 
 dthresh.hela_arh3 <- 0.5
 hits.hela.arh3.des <- (hela.arh3.des %>%
   crispRutils:::.prep_4_mle(dthresh.hela_arh3) %>%
-  dplyr::filter(total == 3))$gene
+  dplyr::filter(total == 2))$gene
 
 ```
 

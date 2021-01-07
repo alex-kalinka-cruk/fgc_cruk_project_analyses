@@ -1,0 +1,42 @@
+---
+title: 'FGC_0014 candidate synthetic lethals: CPTAC analysis of tumour-normal lung proteome quantitations'
+author: "Alex Kalinka"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    depth: 3
+    highlight: tango
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+---
+
+# Setup
+
+```{r}
+options(warn=-1)
+
+suppressMessages(library(knitr))
+suppressMessages(library(magrittr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(dplyr))
+suppressMessages(library(crispRutils))
+
+# Candidate list.
+sl.cand <- read.csv("../data/fgc_0014--depleted-hits.csv", stringsAsFactors = F)
+
+# CPTAC protein quantitation: CPTAC LSCC Discovery Study (early release: embargo Dec 1, 2021).
+lscc <- read.delim("../data/CPTAC_S058_LSCC_Discovery/CPTAC3_Lung_Squamous_Cell_Carcinoma_Proteome.tmt11.tsv",
+                   stringsAsFactors = F)
+
+# CPTAC samples.
+lscc.samps <- read.delim("../data/CPTAC_S058_LSCC_Discovery/CPTAC3_Lung_Squamous_Cell_Carcinoma_Proteome.sample.txt",
+                         stringsAsFactors = F)
+
+
+
+```
+
+
