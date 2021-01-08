@@ -1,5 +1,5 @@
 ---
-title: 'FGC_0014 candidate synthetic lethals: CPTAC analysis of tumour-normal lung proteome quantitations'
+title: 'FGC_0014 candidate synthetic lethals: CPTAC analysis of tumour-normal lung proteome quantifications'
 author: "Alex Kalinka"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -22,7 +22,11 @@ suppressMessages(library(knitr))
 suppressMessages(library(magrittr))
 suppressMessages(library(ggplot2))
 suppressMessages(library(dplyr))
+suppressMessages(library(tidyr))
 suppressMessages(library(crispRutils))
+
+filter <- dplyr::filter
+select <- dplyr::select
 
 # Candidate list.
 sl.cand <- read.csv("../data/fgc_0014--depleted-hits.csv", stringsAsFactors = F)
@@ -31,12 +35,82 @@ sl.cand <- read.csv("../data/fgc_0014--depleted-hits.csv", stringsAsFactors = F)
 lscc <- read.delim("../data/CPTAC_S058_LSCC_Discovery/CPTAC3_Lung_Squamous_Cell_Carcinoma_Proteome.tmt11.tsv",
                    stringsAsFactors = F)
 
-# CPTAC samples.
+# CPTAC samples: organised into tumour-non-tumour pairs.
 lscc.samps <- read.delim("../data/CPTAC_S058_LSCC_Discovery/CPTAC3_Lung_Squamous_Cell_Carcinoma_Proteome.sample.txt",
-                         stringsAsFactors = F)
+                         stringsAsFactors = F) %>%
+  select(starts_with("X")) %>%
+  select(-X130C,-X131N,-X131C) %>%
+  t() %>%
+  unlist() %>%
+  matrix(88,2,byrow = T) %>%
+  as.data.frame()
 
-
+# NAT - normal tissue adjacent to the tumour.
+colnames(lscc.samps) <- c("Tumour","NAT")
 
 ```
+
+# Lung Squamous Cell Carcinoma
+
+## Proteome
+
+### Tumour-Normal correlations
+
+```{r}
+# Function library.
+make_tumour_pair_diffs <- function(data){
+  colnames(data) <- gsub("^(.*?)\\..*$","\\1",colnames(data))
+  tum <- unlist(data[,colnames(data) %in% lscc.samps$Tumour])
+  nat <- unlist(data[,colnames(data) %in% lscc.samps$NAT])
+  return(data.frame(patient = 1:length(tum), lfc_diff = tum - nat))
+}
+
+corr_gene_pair <- function(data, tdiff_comp, cmethod = "spearman"){
+  # tdiff_comp - data for a comparator gene.
+  tdiff <- make_tumour_pair_diffs(data)
+  return(cor(tdiff, tdiff_comp, method = cmethod))
+}
+
+```
+
+#### Shared
+
+```{r}
+tdiff_limd1 <- lscc %>%
+  select(-contains("Unshared"),-NCBIGeneID,-Authority,-Description,-Organism,-Chromosome,-Locus) %>%
+  filter(Gene == "LIMD1") %>%
+  make_tumour_pair_diffs()
+
+lscc.sl <- lscc %>%
+  select(-contains("Unshared"),-NCBIGeneID,-Authority,-Description,-Organism,-Chromosome,-Locus) %>%
+  filter(Gene %in% c("LIMD1","GPX1","GPX7","SLC7A11",sl.cand$gene[sl.cand$Gain_lethality_LIMD1==1])) %>%
+  group_by(Gene) %>%
+  do(data.frame(make_tumour_pair_diffs(.))) %>%
+  ungroup() %>%
+  pivot_wider(names_from = Gene, values_from = lfc_diff)
+
+```
+
+#### Unshared
+
+```{r}
+tdiff_limd1.us <- lscc %>%
+  select(Gene,contains("Unshared")) %>%
+  filter(Gene == "LIMD1") %>%
+  make_tumour_pair_diffs()
+
+lscc.sl.us <- lscc %>%
+  select(Gene,contains("Unshared")) %>%
+  filter(Gene %in% c("LIMD1","GPX1","GPX7","SLC7A11",sl.cand$gene[sl.cand$Gain_lethality_LIMD1==1])) %>%
+  group_by(Gene) %>%
+  do(data.frame(make_tumour_pair_diffs(.))) %>%
+  ungroup() %>%
+  pivot_wider(names_from = Gene, values_from = lfc_diff)
+
+```
+
+# Lung Adenocarcinoma
+
+## Proteome
 
 
