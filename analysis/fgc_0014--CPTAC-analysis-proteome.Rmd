@@ -37,21 +37,24 @@ lscc <- read.delim("../data/CPTAC_S058_LSCC_Discovery/CPTAC3_Lung_Squamous_Cell_
                    stringsAsFactors = F)
 
 # samples: organised into tumour-non-tumour pairs.
-lscc.samps <- read.delim("../data/CPTAC_S058_LSCC_Discovery/CPTAC3_Lung_Squamous_Cell_Carcinoma_Proteome.sample.txt",
-                         stringsAsFactors = F) %>%
-  select(starts_with("X")) %>%
-  select(-X130C,-X131N,-X131C) %>%
-  t() %>%
-  unlist() %>%
-  matrix(88,2,byrow = T) %>%
-  as.data.frame()
+#lscc.samps <- read.delim("../data/CPTAC_S058_LSCC_Discovery/CPTAC3_Lung_Squamous_Cell_Carcinoma_Proteome.sample.txt",
+#                         stringsAsFactors = F) %>%
+#  select(starts_with("X")) %>%
+#  select(-X130C,-X131N,-X131C) %>%
+#  t() %>%
+#  unlist() %>%
+#  matrix(88,2,byrow = T) %>%
+#  as.data.frame()
 
 # NAT - normal tissue adjacent to the tumour.
-colnames(lscc.samps) <- c("Tumour","NAT")
+#colnames(lscc.samps) <- c("Tumour","NAT")
+
+lscc.samps <- read.csv("../data/CPTAC_S058_LSCC_Discovery/lscc_samples_annotated.csv", stringsAsFactors = F)
 
 ## LUAD CPTAC.
 # Proteome.
-luad <- read.delim("../data/CPTAC_LUAD_S046/CPTAC3_Lung_Adeno_Carcinoma_Proteome.tmt10.tsv")
+luad <- read.delim("../data/CPTAC_LUAD_S046/CPTAC3_Lung_Adeno_Carcinoma_Proteome.tmt10.tsv",
+                   stringsAsFactors = F)
 
 # samples.
 luad.samps <- read.delim("../data/CPTAC_LUAD_S046/CPTAC3_Lung_Adeno_Carcinoma_Proteome.sample.txt",
@@ -68,18 +71,12 @@ colnames(luad.samps) <- c("Tumour","NAT")
 
 ```
 
-# Lung Squamous Cell Carcinoma
-
-## Proteome
-
-### Tumour-Normal correlations
-
 ```{r}
 # Function library.
-make_tumour_pair_diffs <- function(data){
+make_tumour_pair_diffs <- function(data, samps){
   colnames(data) <- gsub("^(.*?)\\..*$","\\1",colnames(data))
-  tum <- unlist(data[,colnames(data) %in% lscc.samps$Tumour])
-  nat <- unlist(data[,colnames(data) %in% lscc.samps$NAT])
+  tum <- unlist(data[,match(samps$Tumour, colnames(data))])
+  nat <- unlist(data[,match(samps$NAT, colnames(data))])
   return(data.frame(patient = 1:length(tum), lfc_diff = tum - nat))
 }
 
@@ -90,6 +87,12 @@ corr_gene_pair <- function(data, tdiff_comp, cmethod = "spearman"){
 }
 
 ```
+
+# Lung Squamous Cell Carcinoma
+
+## Proteome
+
+### Tumour-Normal correlations
 
 #### Shared
 
@@ -103,7 +106,7 @@ lscc.sl <- lscc %>%
   select(-contains("Unshared"),-NCBIGeneID,-Authority,-Description,-Organism,-Chromosome,-Locus) %>%
   filter(Gene %in% c("LIMD1","GPX1","GPX7","SLC7A11",sl.cand$gene[sl.cand$Gain_lethality_LIMD1==1])) %>%
   group_by(Gene) %>%
-  do(data.frame(make_tumour_pair_diffs(.))) %>%
+  do(data.frame(make_tumour_pair_diffs(., lscc.samps))) %>%
   ungroup() %>%
   pivot_wider(names_from = Gene, values_from = lfc_diff)
 
@@ -121,7 +124,7 @@ lscc.sl.us <- lscc %>%
   select(Gene,contains("Unshared")) %>%
   filter(Gene %in% c("LIMD1","GPX1","GPX7","SLC7A11",sl.cand$gene[sl.cand$Gain_lethality_LIMD1==1])) %>%
   group_by(Gene) %>%
-  do(data.frame(make_tumour_pair_diffs(.))) %>%
+  do(data.frame(make_tumour_pair_diffs(., lscc.samps))) %>%
   ungroup() %>%
   pivot_wider(names_from = Gene, values_from = lfc_diff)
 
@@ -131,8 +134,42 @@ lscc.sl.us <- lscc %>%
 
 ## Proteome
 
-```{r}
+### Shared
 
+```{r}
+luad.sl <- luad %>%
+  select(-contains("Unshared"),-NCBIGeneID,-Authority,-Description,-Organism,-Chromosome,-Locus) %>%
+  filter(Gene %in% c("LIMD1","GPX1","GPX7","SLC7A11",sl.cand$gene[sl.cand$Gain_lethality_LIMD1==1])) %>%
+  group_by(Gene) %>%
+  do(data.frame(make_tumour_pair_diffs(., luad.samps))) %>%
+  ungroup() %>%
+  pivot_wider(names_from = Gene, values_from = lfc_diff)
+
+luad.sl %>%
+  ggplot(aes(LIMD1, GPX4)) +
+  geom_point() +
+  geom_smooth() +
+  ggtitle("")
 
 ```
+
+### Unshared
+
+```{r}
+luad.sl.us <- luad %>%
+  select(Gene,contains("Unshared")) %>%
+  filter(Gene %in% c("LIMD1","GPX1","GPX7","SLC7A11",sl.cand$gene[sl.cand$Gain_lethality_LIMD1==1])) %>%
+  group_by(Gene) %>%
+  do(data.frame(make_tumour_pair_diffs(., luad.samps))) %>%
+  ungroup() %>%
+  pivot_wider(names_from = Gene, values_from = lfc_diff)
+
+luad.sl.us %>%
+  ggplot(aes(LIMD1, GPX4)) +
+  geom_point() +
+  geom_smooth() +
+  ggtitle("")
+
+```
+
 
