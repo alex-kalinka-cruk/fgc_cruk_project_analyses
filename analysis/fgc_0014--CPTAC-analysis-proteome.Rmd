@@ -31,11 +31,12 @@ select <- dplyr::select
 # Candidate list.
 sl.cand <- read.csv("../data/fgc_0014--depleted-hits.csv", stringsAsFactors = F)
 
-# CPTAC protein quantitation: CPTAC LSCC Discovery Study (early release: embargo Dec 1, 2021).
+## LSCC CPTAC.
+# Protein quantitation: CPTAC LSCC Discovery Study (early release: embargo Dec 1, 2021).
 lscc <- read.delim("../data/CPTAC_S058_LSCC_Discovery/CPTAC3_Lung_Squamous_Cell_Carcinoma_Proteome.tmt11.tsv",
                    stringsAsFactors = F)
 
-# CPTAC samples: organised into tumour-non-tumour pairs.
+# samples: organised into tumour-non-tumour pairs.
 lscc.samps <- read.delim("../data/CPTAC_S058_LSCC_Discovery/CPTAC3_Lung_Squamous_Cell_Carcinoma_Proteome.sample.txt",
                          stringsAsFactors = F) %>%
   select(starts_with("X")) %>%
@@ -47,6 +48,23 @@ lscc.samps <- read.delim("../data/CPTAC_S058_LSCC_Discovery/CPTAC3_Lung_Squamous
 
 # NAT - normal tissue adjacent to the tumour.
 colnames(lscc.samps) <- c("Tumour","NAT")
+
+## LUAD CPTAC.
+# Proteome.
+luad <- read.delim("../data/CPTAC_LUAD_S046/CPTAC3_Lung_Adeno_Carcinoma_Proteome.tmt10.tsv")
+
+# samples.
+luad.samps <- read.delim("../data/CPTAC_LUAD_S046/CPTAC3_Lung_Adeno_Carcinoma_Proteome.sample.txt",
+                         stringsAsFactors = F) %>%
+  select(starts_with("X")) %>%
+  select(-X130C,-X131) %>%
+  t() %>%
+  unlist() %>%
+  matrix(25*4,2,byrow = T) %>%
+  as.data.frame()
+
+# NAT - normal tissue adjacent to the tumour.
+colnames(luad.samps) <- c("Tumour","NAT")
 
 ```
 
@@ -113,4 +131,8 @@ lscc.sl.us <- lscc %>%
 
 ## Proteome
 
+```{r}
+
+
+```
 
