@@ -77,7 +77,18 @@ make_tumour_pair_diffs <- function(data, samps){
   colnames(data) <- gsub("^(.*?)\\..*$","\\1",colnames(data))
   tum <- unlist(data[,match(samps$Tumour, colnames(data))])
   nat <- unlist(data[,match(samps$NAT, colnames(data))])
-  return(data.frame(patient = 1:length(tum), lfc_diff = tum - nat))
+  if("Sex" %in% colnames(samps)){
+    tspecimen <- unlist(colnames(data[,match(samps$Tumour, colnames(data))]))
+    ret <- data.frame(patient = 1:length(tum), 
+                      Sex = samps$Sex[match(tspecimen, samps$Tumour)],
+                      Smoking_status = samps$Smoking_status[match(tspecimen, samps$Tumour)],
+                      Patient_origin  = samps$Patient_origin[match(tspecimen, samps$Tumour)], 
+                      lfc_diff = tum - nat,
+                      stringsAsFactors = F)
+  }else{
+    ret <- data.frame(patient = 1:length(tum), lfc_diff = tum - nat)
+  }
+  return(ret)
 }
 
 corr_gene_pair <- function(data, tdiff_comp, cmethod = "spearman"){
@@ -88,7 +99,7 @@ corr_gene_pair <- function(data, tdiff_comp, cmethod = "spearman"){
 
 ```
 
-# Lung Squamous Cell Carcinoma
+# Lung Squamous Cell Carcinoma (LSCC)
 
 ## Proteome
 
@@ -110,6 +121,18 @@ lscc.sl <- lscc %>%
   ungroup() %>%
   pivot_wider(names_from = Gene, values_from = lfc_diff)
 
+lscc.sl %>%
+  ggplot(aes(LIMD1, GPX4)) +
+  geom_point() +
+  geom_smooth() +
+  ggtitle("LSCC: LIMD1 vs GPX4")
+
+lscc.sl %>%
+  ggplot(aes(LIMD1, GPX4, color = interaction(Sex,Smoking_status))) +
+  geom_point() +
+  geom_smooth(se=F) +
+  ggtitle("LSCC: LIMD1 vs GPX4")
+
 ```
 
 #### Unshared
@@ -130,7 +153,7 @@ lscc.sl.us <- lscc %>%
 
 ```
 
-# Lung Adenocarcinoma
+# Lung Adenocarcinoma (LUAD)
 
 ## Proteome
 
