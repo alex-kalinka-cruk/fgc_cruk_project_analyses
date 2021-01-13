@@ -16,6 +16,7 @@ output:
 # Setup
 
 ```{r}
+set.seed(1)
 options(warn=-1)
 
 suppressMessages(library(knitr))
@@ -24,6 +25,7 @@ suppressMessages(library(ggplot2))
 suppressMessages(library(dplyr))
 suppressMessages(library(tidyr))
 suppressMessages(library(crispRutils))
+suppressMessages(library(GGally))
 
 filter <- dplyr::filter
 select <- dplyr::select
@@ -82,11 +84,13 @@ make_tumour_pair_diffs <- function(data, samps){
     ret <- data.frame(patient = 1:length(tum), 
                       Sex = samps$Sex[match(tspecimen, samps$Tumour)],
                       Smoking_status = samps$Smoking_status[match(tspecimen, samps$Tumour)],
-                      Patient_origin  = samps$Patient_origin[match(tspecimen, samps$Tumour)], 
+                      Patient_origin  = samps$Patient_origin[match(tspecimen, samps$Tumour)],
+                      tumour = tum, NAT = nat,
                       lfc_diff = tum - nat,
                       stringsAsFactors = F)
   }else{
-    ret <- data.frame(patient = 1:length(tum), lfc_diff = tum - nat)
+    ret <- data.frame(patient = 1:length(tum), tumour = tum,
+                      NAT = nat, lfc_diff = tum - nat)
   }
   return(ret)
 }
@@ -95,6 +99,79 @@ corr_gene_pair <- function(data, tdiff_comp, cmethod = "spearman"){
   # tdiff_comp - data for a comparator gene.
   tdiff <- make_tumour_pair_diffs(data)
   return(cor(tdiff, tdiff_comp, method = cmethod))
+}
+
+# Multi-way correlation:
+cor_taylor <- function(X){
+  if(!inherits(X,"matrix")){
+    stop("Input must be inherit ’matrix’ class.")
+    }
+  n <- ncol(X)
+  return((1/sqrt(n))*sd(eigen(cor(X))$values))
+}
+
+# Adding loess fits to 'ggpairs' plots.
+smf <- function(data, mapping, method = "loess", ...){
+  p = ggplot(data = data, mapping = mapping) + 
+    geom_point() + 
+    geom_smooth(method=method, ...)
+  p
+}
+
+# Multi-way correlation for a set of genes.
+mcorr_gene_set <- function(data, genes = NULL, n = 13){
+  if(is.null(genes))
+    genes <- sample(data$Gene,n,replace = F)
+  # If genes is NULL then randomly sample n genes.
+  data %<>%
+    select(-contains("Unshared"),-NCBIGeneID,-Authority,-Description,-Organism,-Chromosome,-Locus) %>%
+    filter(Gene %in% genes) %>%
+    group_by(Gene) %>%
+    do(data.frame(make_tumour_pair_diffs(., lscc.samps))) %>%
+    ungroup() %>%
+    select(-tumour,-NAT) %>%
+    pivot_wider(names_from = Gene, values_from = lfc_diff) %>%
+    select(-patient,-Sex,-Smoking_status,-Patient_origin)
+  # Remove any genes with NA values.
+  na_cols <- !apply(data,2,function(x) any(is.na(x)))
+  data <- data[,na_cols]
+  return(cor_taylor(as.matrix(data)))
+}
+
+sample_mcor_gene_sets <- function(data, n = 13, reps = 10){
+  ret <- NULL
+  for(i in 1:reps){
+    ret <- append(ret, mcorr_gene_set(data, NULL, n))
+  }
+  return(ret)
+}
+
+# Correlation of focal gene with subsets of genes.
+cor_focal_gene <- function(data, focal_gene = "LIMD1", genes = NULL, n = 13){
+  if(is.null(genes))
+    genes <- sample(data$Gene,n,replace = F)
+  # If genes is NULL then randomly sample n genes.
+  data %<>%
+    select(-contains("Unshared"),-NCBIGeneID,-Authority,-Description,-Organism,-Chromosome,-Locus) %>%
+    filter(Gene %in% c(focal_gene,genes)) %>%
+    group_by(Gene) %>%
+    do(data.frame(make_tumour_pair_diffs(., lscc.samps))) %>%
+    ungroup() %>%
+    select(-tumour,-NAT) %>%
+    pivot_wider(names_from = Gene, values_from = lfc_diff) %>%
+    select(-patient,-Sex,-Smoking_status,-Patient_origin)
+  fc <- function(x) cor(x,data[,focal_gene],method="spearman")
+  cors <- apply(data[,2:ncol(data)],2,fc)
+  cors <- cors[!names(cors) == focal_gene]
+  return(cors)
+}
+
+sample_cor_focal_gene <- function(data, focal_gene = "LIMD1", n = 13, reps = 10){
+  ret <- NULL
+  for(i in 1:reps){
+    ret <- append(ret, cor_focal_gene(data, focal_gene, NULL, n))
+  }
+  return(ret)
 }
 
 ```
@@ -108,24 +185,87 @@ corr_gene_pair <- function(data, tdiff_comp, cmethod = "spearman"){
 #### Shared
 
 ```{r}
-tdiff_limd1 <- lscc %>%
+lscc.all <- lscc %>%
   select(-contains("Unshared"),-NCBIGeneID,-Authority,-Description,-Organism,-Chromosome,-Locus) %>%
-  filter(Gene == "LIMD1") %>%
-  make_tumour_pair_diffs()
+  group_by(Gene) %>%
+  do(data.frame(make_tumour_pair_diffs(., lscc.samps))) %>%
+  ungroup()
+
 
 lscc.sl <- lscc %>%
   select(-contains("Unshared"),-NCBIGeneID,-Authority,-Description,-Organism,-Chromosome,-Locus) %>%
   filter(Gene %in% c("LIMD1","GPX1","GPX7","SLC7A11",sl.cand$gene[sl.cand$Gain_lethality_LIMD1==1])) %>%
   group_by(Gene) %>%
   do(data.frame(make_tumour_pair_diffs(., lscc.samps))) %>%
-  ungroup() %>%
+  ungroup()
+
+lscc.sl.diff <- lscc.sl %>%
+  select(-tumour, -NAT) %>%
   pivot_wider(names_from = Gene, values_from = lfc_diff)
 
-lscc.sl %>%
+lscc.sl.tum <- lscc.sl %>%
+  select(-lfc_diff, -NAT) %>%
+  pivot_wider(names_from = Gene, values_from = tumour)
+
+lscc.sl.nat <- lscc.sl %>%
+  select(-lfc_diff, -tumour) %>%
+  pivot_wider(names_from = Gene, values_from = NAT)
+
+# Multi-way correlation for SL.
+mcor <- mcorr_gene_set(lscc, genes = sl.cand$gene[sl.cand$Gain_lethality_LIMD1==1])
+samp.mcor <- sample_mcor_gene_sets(lscc, reps = 100)
+
+
+# Plots.
+lscc.all %>%
+  mutate(gene = ifelse(Gene == "LIMD1","LIMD1","All")) %>%
+  ggplot(aes(gene,lfc_diff)) +
+  geom_point() +
+  geom_boxplot(outlier.shape = NA) +
+  ylim(-2,2) +
+  geom_hline(yintercept = 0, linetype="dashed") +
+  ggtitle("Relative protein abundance: LIMD1 is downregulated")
+
+data.frame(multi_way_corr.protein_abundance.rel_NAT = samp.mcor, type = "random_samples") %>%
+  ggplot(aes(multi_way_corr.protein_abundance.rel_NAT, fill = type)) +
+  geom_density(alpha=0.25) +
+  geom_vline(xintercept = mcor, color = "red") +
+  ggtitle("Protein Abundance inter-dependence: red line - synthetic lethals")
+
+cpl <- ggcorr(lscc.sl.diff %>% 
+                select(-patient,-EEFSEC,-GPX7,-SLC7A11,-SNAP23), 
+              label=T)
+cpl.g <- ggplotGrob(cpl)
+cpl.colors <- cpl.g$grobs[[6]]$children[[3]]$gp$fill
+
+gppl <- ggpairs(lscc.sl.diff, columns = c(6:8,10:16,19:20), lower = list(continuous = smf))
+
+p <- length(c(6:8,10:16,19:20))
+idx <- 1
+for (k1 in 1:(p-1)) {
+  for (k2 in (k1+1):p) {
+    plt <- getPlot(gppl,k1,k2) +
+     theme(panel.background = element_rect(fill = cpl.colors[idx], color="white"),
+           panel.grid.major = element_line(color=cpl.colors[idx]))
+    gppl <- putPlot(gppl,plt,k1,k2)
+    idx <- idx+1
+}
+}
+
+print(gppl +
+        ggtitle("Protein abundance correlations: synthetic lethals"))
+
+lscc.sl.diff %>%
   ggplot(aes(LIMD1, GPX4)) +
   geom_point() +
   geom_smooth() +
   ggtitle("LSCC: LIMD1 vs GPX4")
+
+lscc.sl.diff %>%
+  ggplot(aes(GPX1, GPX4)) +
+  geom_point() +
+  geom_smooth() +
+  ggtitle("LSCC: GPX1 vs GPX4")
 
 lscc.sl %>%
   ggplot(aes(LIMD1, GPX4, color = interaction(Sex,Smoking_status))) +
@@ -165,11 +305,20 @@ luad.sl <- luad %>%
   filter(Gene %in% c("LIMD1","GPX1","GPX7","SLC7A11",sl.cand$gene[sl.cand$Gain_lethality_LIMD1==1])) %>%
   group_by(Gene) %>%
   do(data.frame(make_tumour_pair_diffs(., luad.samps))) %>%
-  ungroup() %>%
+  ungroup()
+
+luad.sl.diff <- luad.sl %>%
+  select(-tumour, -NAT) %>%
   pivot_wider(names_from = Gene, values_from = lfc_diff)
 
-luad.sl %>%
+luad.sl.diff %>%
   ggplot(aes(LIMD1, GPX4)) +
+  geom_point() +
+  geom_smooth() +
+  ggtitle("")
+
+luad.sl.diff %>%
+  ggplot(aes(GPX1, GPX4)) +
   geom_point() +
   geom_smooth() +
   ggtitle("")
