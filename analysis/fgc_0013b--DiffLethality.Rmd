@@ -1,0 +1,150 @@
+---
+title: 'FGC_0013b: A549 (ARH3-/-), HeLa (TARG1-/-, ARH3-/- and HPF1-/-) and U2OS (TARG1-/-, ARH3-/- and HPF1-/-) synthetic lethality screens'
+author: "Alex Kalinka"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    depth: 3
+    highlight: tango
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+---
+
+# Setup
+
+```{r}
+options(warn=-1)
+
+suppressMessages(library(knitr))
+suppressMessages(library(magrittr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(GGally))
+suppressMessages(library(dplyr))
+suppressMessages(library(crispRutils))
+
+base_path <- "~/data/az_cruk/fgc_0013b"
+
+```
+
+
+# QC
+
+## HeLa TARG1 Day 11
+
+```{r}
+qc.hela.targ1_day11 <- readRDS(file.path(base_path,"HeLa-DiffLeth-WT-TARG1-day11/qc/QC_fgc.rds"))
+
+crispRutils::annotate_gene_sets_lfc_grna(qc.hela.targ1_day11) %>%
+  plot()
+
+crispRutils::plot_perf_curves_fgcQC(qc.hela.targ1_day11, "PrRc")
+
+```
+
+## HeLa TARG1 Day 18
+
+```{r}
+qc.hela.targ1_day18 <- readRDS(file.path(base_path,"HeLa-DiffLeth-WT-TARG1-day18/qc/QC_fgc.rds"))
+
+crispRutils::annotate_gene_sets_lfc_grna(qc.hela.targ1_day18) %>%
+  plot()
+
+crispRutils::plot_perf_curves_fgcQC(qc.hela.targ1_day18, "PrRc")
+
+rbind(qc.hela.targ1_day11$qc_metrics,qc.hela.targ1_day18$qc_metrics) %>%
+  ggplot(aes(time_point_duration_in_days,gini_coefficient_counts,color=SampleClass)) +
+  geom_point() +
+  ggtitle("HeLa TARG1: gini coefficients")
+
+```
+
+## A549 ARH3 Day 14
+
+```{r}
+qc.a549.arh3_day14 <- readRDS(file.path(base_path,"A549-DiffLeth-WT-ARH3-day14/qc/QC_fgc.rds"))
+
+crispRutils::annotate_gene_sets_lfc_grna(qc.a549.arh3_day14) %>%
+  plot()
+
+crispRutils::plot_perf_curves_fgcQC(qc.a549.arh3_day14, "PrRc")
+
+```
+
+## A549 ARH3 Day 21
+
+```{r}
+qc.a549.arh3_day21 <- readRDS(file.path(base_path,"A549-DiffLeth-WT-ARH3-day21/qc/QC_fgc.rds"))
+
+crispRutils::annotate_gene_sets_lfc_grna(qc.a549.arh3_day21) %>%
+  plot()
+
+crispRutils::plot_perf_curves_fgcQC(qc.a549.arh3_day21, "PrRc")
+
+rbind(qc.a549.arh3_day14$qc_metrics,qc.a549.arh3_day21$qc_metrics) %>%
+  ggplot(aes(time_point_duration_in_days,gini_coefficient_counts,color=SampleClass)) +
+  geom_point() +
+  ggtitle("A549 ARH3: gini coefficients")
+
+```
+
+## U2OS HPF1 Day 14
+
+```{r}
+qc.u2os.hpf1_day14 <- readRDS(file.path(base_path,"U2OS-DiffLeth-WT-HPF1-day14/qc/QC_fgc.rds"))
+
+crispRutils::annotate_gene_sets_lfc_grna(qc.u2os.hpf1_day14) %>%
+  plot()
+
+crispRutils::plot_perf_curves_fgcQC(qc.u2os.hpf1_day14, "PrRc")
+
+```
+
+## U2OS HPF1 Day 21
+
+```{r}
+qc.u2os.hpf1_day21 <- readRDS(file.path(base_path,"U2OS-DiffLeth-WT-HPF1-day21/qc/QC_fgc.rds"))
+
+crispRutils::annotate_gene_sets_lfc_grna(qc.u2os.hpf1_day21) %>%
+  plot()
+
+crispRutils::plot_perf_curves_fgcQC(qc.u2os.hpf1_day21, "PrRc")
+
+rbind(qc.u2os.hpf1_day14$qc_metrics,qc.u2os.hpf1_day21$qc_metrics) %>%
+  ggplot(aes(time_point_duration_in_days,gini_coefficient_counts,color=SampleClass)) +
+  geom_point() +
+  ggtitle("U2OS HPF1: gini coefficients")
+
+```
+
+## U2OS TARG1 Day 14
+
+```{r}
+qc.u2os.targ1_day14 <- readRDS(file.path(base_path,"U2OS-DiffLeth-WT-TARG1-day14/qc/QC_fgc.rds"))
+
+crispRutils::annotate_gene_sets_lfc_grna(qc.u2os.targ1_day14) %>%
+  plot()
+
+crispRutils::plot_perf_curves_fgcQC(qc.u2os.targ1_day14, "PrRc")
+
+```
+
+## U2OS TARG1 Day 18
+
+```{r}
+qc.u2os.targ1_day18 <- readRDS(file.path(base_path,"U2OS-DiffLeth-WT-TARG1-day18/qc/QC_fgc.rds"))
+
+crispRutils::annotate_gene_sets_lfc_grna(qc.u2os.targ1_day18) %>%
+  plot()
+
+crispRutils::plot_perf_curves_fgcQC(qc.u2os.targ1_day18, "PrRc")
+
+rbind(qc.u2os.targ1_day14$qc_metrics,qc.u2os.targ1_day18$qc_metrics) %>%
+  ggplot(aes(time_point_duration_in_days,gini_coefficient_counts,color=SampleClass)) +
+  geom_point() +
+  ggtitle("U2OS TARG1: gini coefficients")
+
+```
+
