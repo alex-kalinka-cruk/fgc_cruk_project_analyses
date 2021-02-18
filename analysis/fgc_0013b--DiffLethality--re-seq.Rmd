@@ -35,13 +35,18 @@ sdepl.u2os.arh3 <- readRDS(file="../data/hits.u2os.arh3.des.rds")
 
 # Synthetic Lethality Analysis
 
+Candidate genes are called if they satisfy both of the following criteria:
+
+* Called as essential in the Mutant (Bagel) and **not** called as essential in the Wild-Type (Bagel).
+* A False Discovery Rate (FDR) < 0.1 in Mutant versus Wild-Type comparison for negative fold-change cases (Mageck).
+
 ## ARH3 -/-
 
 ### A549
 
 #### Day 14
 
-There are 78 synthetic lethal genes with a strong enrichment of protein interactions (*P* = 7.14e-6). They are enriched for 'cellular response to hypoxia' and 'p53 signaling pathway'. One gene is shared in common with the shared depletion hits of HeLa ARH3-/- (FGC_0013a): CFLAR, an [apoptosis regulator](https://en.wikipedia.org/wiki/CFLAR).
+There are 101 synthetic lethal genes with a strong enrichment of protein interactions (*P* = 7.14e-6). They are enriched for 'cellular response to hypoxia' and 'p53 signaling pathway'. One gene is shared in common with the shared depletion hits of HeLa ARH3-/- (FGC_0013a): CFLAR, an [apoptosis regulator](https://en.wikipedia.org/wiki/CFLAR).
 
 There are 152 genes that have lost essentiality in the knock-out line and they have a strong enrichment of protein interactions (*P* = 4.27e-13), and are strongly enriched for 'folic acid metabolism', which was also an enrichment for genes that had lost essentiality in the original HeLa HPF1-/- screen (FGC_0013a), and also enriched for 'cell cycle process'.
 
@@ -59,7 +64,7 @@ hits.a549.arh3.day14 <- a549.arh3_day14$mageck_treat_vs_ctrl_ess_annot %>%
   select(id,neg.lfc,neg.fdr) %>%
   arrange(neg.fdr)
 
-write.csv(hits.a549.arh3.day14, file = "../data/fgc_0013b/fgc_0013b-synth-lethals-a549-arh3-day14--reseq.csv", 
+write.csv(hits.a549.arh3.day14, file = "../data/fgc_0013b/fgc_0013b-synth-lethals-a549-arh3-day14.csv", 
           row.names = F, quote=F)
 
 # Loss of essentiality in KO.
@@ -68,7 +73,7 @@ loss_ess.a549.arh3.day14 <- a549.arh3_day14$mageck_treat_vs_ctrl_ess_annot %>%
   select(id,pos.lfc,pos.fdr) %>%
   arrange(pos.fdr)
 
-write.csv(loss_ess.a549.arh3.day14, file = "../data/fgc_0013b/fgc_0013b-loss-ess-a549-arh3-day14--reseq.csv", 
+write.csv(loss_ess.a549.arh3.day14, file = "../data/fgc_0013b/fgc_0013b-loss-ess-a549-arh3-day14.csv", 
           row.names = F, quote=F)
 
 ```
@@ -77,11 +82,9 @@ write.csv(loss_ess.a549.arh3.day14, file = "../data/fgc_0013b/fgc_0013b-loss-ess
 ![](../images/string-fgc_0013b-synth_lethals-a549-arh3-day14--BP--reseq.png)
 ![](../images/string-fgc_0013b-synth_lethals-a549-arh3-day14--kegg--reseq.png)
 
-#### Day 21
-
-There is only one synthetic lethal at day 21: MBNL1, an [RNA-splicing protein](https://en.wikipedia.org/wiki/MBNL1).
-
-```{r}
+```{r,eval=F,echo=F}
+# Day 21: left out on account of unbalanced Gini coefficients and log fold changes.
+# There is only one synthetic lethal at day 21: MBNL1, an [RNA-splicing protein](https://en.wikipedia.org/wiki/MBNL1).
 a549.arh3_day21 <- crispRutils::run_synth_lethal_analysis(file.path(base_path, "A549-DiffLeth-WT-ARH3-day21"))
 
 plot(a549.arh3_day21, type = "plasmid", remove_multimappers = T, 
@@ -277,9 +280,9 @@ crispRutils::plot_perf_curves_fgcQC(qc.a549.arh3_day14, "PrRc")
 
 ```
 
-## A549 ARH3 Day 21
 
-```{r}
+```{r,eval=F,echo=F}
+## A549 ARH3 Day 21.
 qc.a549.arh3_day21 <- readRDS(file.path(base_path,"A549-DiffLeth-WT-ARH3-day21/qc/QC_fgc.rds"))
 
 crispRutils::annotate_gene_sets_lfc_grna(qc.a549.arh3_day21) %>%
