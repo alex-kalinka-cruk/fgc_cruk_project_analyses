@@ -46,9 +46,9 @@ Candidate genes are called if they satisfy both of the following criteria:
 
 #### Day 14
 
-There are 101 synthetic lethal genes with a strong enrichment of protein interactions (*P* = 7.14e-6). They are enriched for 'cellular response to hypoxia' and 'p53 signaling pathway'. One gene is shared in common with the shared depletion hits of HeLa ARH3-/- (FGC_0013a): CFLAR, an [apoptosis regulator](https://en.wikipedia.org/wiki/CFLAR).
+There are 99 synthetic lethal genes with a strong enrichment of protein interactions (*P* = 7.14e-6). They are enriched for 'cellular response to hypoxia' and 'p53 signaling pathway'. One gene is shared in common with the shared depletion hits of HeLa ARH3-/- (FGC_0013a): CFLAR, an [apoptosis regulator](https://en.wikipedia.org/wiki/CFLAR).
 
-There are 152 genes that have lost essentiality in the knock-out line and they have a strong enrichment of protein interactions (*P* = 4.27e-13), and are strongly enriched for 'folic acid metabolism', which was also an enrichment for genes that had lost essentiality in the original HeLa HPF1-/- screen (FGC_0013a), and also enriched for 'cell cycle process'.
+There are 150 genes that have lost essentiality in the knock-out line and they have a strong enrichment of protein interactions (*P* = 4.27e-13), and are strongly enriched for 'folic acid metabolism', which was also an enrichment for genes that had lost essentiality in the original HeLa HPF1-/- screen (FGC_0013a), and also enriched for 'cell cycle process'.
 
 ```{r}
 a549.arh3_day14 <- crispRutils::run_synth_lethal_analysis(file.path(base_path, "A549-DiffLeth-WT-ARH3-day14"))
